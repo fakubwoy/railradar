@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "node generate-config.js"
+  },
+  "deploy": {
+    "startCommand": "npx serve .",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
