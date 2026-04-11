@@ -1,0 +1,2993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RailRadar — Train Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a; --bg2: #111111; --bg3: #181818; --bg4: #1e1e1e;
+  --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13);
+  --text: #f0ede8; --text2: #888880; --text3: #555550;
+  --accent: #c8f060; --accent2: #a0c840;
+  --red: #ff5050; --amber: #ffb840; --blue: #60a8f0;
+  --teal: #40d0a0; --purple: #b080f0; --orange: #ff8c40;
+  --mono: 'DM Mono', monospace; --serif: 'Fraunces', serif; --sans: 'DM Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; overflow-x: hidden; }
+.app { display: grid; grid-template-columns: 268px 1fr; min-height: 100vh; }
+
+/* ─── SIDEBAR ─── */
+.sidebar { background: var(--bg2); border-right: 1px solid var(--border); padding: 24px 0; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+.logo-word { font-family: var(--serif); font-size: 22px; font-weight: 300; color: var(--text); letter-spacing: -0.3px; }
+.logo-sub { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: .1em; text-transform: uppercase; margin-top: 2px; }
+.nav-section { padding: 0 12px; margin-bottom: 6px; }
+.nav-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: .12em; text-transform: uppercase; padding: 6px 8px; margin-bottom: 2px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13.5px; font-weight: 400; transition: all .15s; border: 1px solid transparent; }
+.nav-item:hover { background: var(--bg3); color: var(--text); }
+.nav-item.active { background: rgba(200,240,96,0.08); color: var(--accent); border-color: rgba(200,240,96,0.15); }
+.nav-icon { font-size: 15px; width: 20px; text-align: center; }
+.nav-badge { margin-left: auto; border-radius: 10px; padding: 1px 7px; font-family: var(--mono); font-size: 10px; }
+.nav-badge.lime { background: rgba(200,240,96,.15); color: var(--accent); }
+.nav-badge.purple { background: rgba(176,128,240,.12); color: var(--purple); }
+.nav-badge.blue { background: rgba(96,168,240,.12); color: var(--blue); }
+.api-status { margin-top: auto; padding: 12px 20px; border-top: 1px solid var(--border); }
+.api-key-area { margin-top: 6px; }
+.api-key-area input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 10px; color: var(--text); font-family: var(--mono); font-size: 11px; outline: none; transition: border .15s; }
+.api-key-area input:focus { border-color: var(--accent); }
+.api-key-area input::placeholder { color: var(--text3); }
+.api-section-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; margin-top: 12px; margin-bottom: 4px; }
+.api-indicator { margin-top: 4px; font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+/* ─── MAIN ─── */
+.main { padding: 32px 36px; max-width: 1000px; }
+.panel { display: none; }
+.panel.active { display: block; }
+.page-title { font-family: var(--serif); font-size: 28px; font-weight: 300; color: var(--text); margin-bottom: 6px; letter-spacing: -0.5px; }
+.page-sub { color: var(--text2); font-size: 13.5px; margin-bottom: 26px; line-height: 1.6; }
+
+/* ─── SEARCH FORM ─── */
+.search-grid { display: grid; grid-template-columns: 1fr 1fr 160px auto; gap: 10px; margin-bottom: 12px; align-items: end; }
+.search-grid-3 { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 10px; margin-bottom: 12px; align-items: end; }
+.field-group { display: flex; flex-direction: column; gap: 5px; }
+.field-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: .1em; text-transform: uppercase; }
+.field-input { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 13px; color: var(--text); font-family: var(--sans); font-size: 13.5px; outline: none; transition: border .15s; width: 100%; }
+.field-input:focus { border-color: var(--accent); }
+.field-input::placeholder { color: var(--text3); }
+select.field-input { cursor: pointer; }
+.btn-primary { background: var(--accent); color: #0a0a0a; border: none; border-radius: 8px; padding: 10px 18px; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: .06em; cursor: pointer; transition: all .15s; white-space: nowrap; height: 42px; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary { background: transparent; color: var(--text2); border: 1px solid var(--border2); border-radius: 8px; padding: 9px 16px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .15s; height: 42px; white-space: nowrap; }
+.btn-secondary:hover { color: var(--text); background: var(--bg3); }
+.btn-small { background: transparent; color: var(--text3); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-family: var(--mono); font-size: 10px; cursor: pointer; transition: all .15s; }
+.btn-small:hover { color: var(--text2); border-color: var(--border2); }
+
+/* ─── CLASS TABS ─── */
+.class-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+.class-tab { padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border2); font-family: var(--mono); font-size: 11px; color: var(--text3); cursor: pointer; transition: all .15s; }
+.class-tab:hover { color: var(--text2); }
+.class-tab.active { background: rgba(200,240,96,0.1); border-color: rgba(200,240,96,0.3); color: var(--accent); }
+
+/* ─── QUOTA TABS ─── */
+.quota-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+.quota-tab { padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border2); font-family: var(--mono); font-size: 11px; color: var(--text3); cursor: pointer; transition: all .15s; }
+.quota-tab:hover { color: var(--text2); }
+.quota-tab.active { background: rgba(96,168,240,0.1); border-color: rgba(96,168,240,0.3); color: var(--blue); }
+.quota-tab.tatkal.active { background: rgba(255,184,64,0.1); border-color: rgba(255,184,64,0.3); color: var(--amber); }
+.quota-tab.pt.active { background: rgba(255,80,80,0.1); border-color: rgba(255,80,80,0.3); color: var(--red); }
+
+/* ─── LOADER ─── */
+.loader { display: none; flex-direction: column; gap: 14px; padding: 22px 0 10px; }
+.loader.visible { display: flex; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* step rows */
+.loader-steps { display: flex; flex-direction: column; gap: 6px; }
+.loader-step { font-family: var(--mono); font-size: 11.5px; color: var(--text3); display: flex; align-items: center; gap: 10px; transition: color .25s; }
+.loader-step.active { color: var(--text2); }
+.loader-step.done { color: var(--text3); }
+
+/* node */
+.step-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .25s; }
+.loader-step.active .step-dot { border-color: var(--accent); background: rgba(200,240,96,.1); animation: loaderPulse 1.2s ease-in-out infinite; }
+.loader-step.done .step-dot { border-color: var(--teal); background: rgba(64,208,160,.1); }
+.step-dot-inner { width: 7px; height: 7px; border-radius: 50%; background: var(--border2); transition: background .25s; }
+.loader-step.active .step-dot-inner { background: var(--accent); }
+.loader-step.done .step-dot-inner { background: var(--teal); }
+@keyframes loaderPulse { 0%,100%{box-shadow:0 0 0 0 rgba(200,240,96,.4)} 50%{box-shadow:0 0 0 5px rgba(200,240,96,0)} }
+
+/* step time badge */
+.step-time { font-family: var(--mono); font-size: 10px; color: var(--teal); margin-left: auto; opacity: 0; transition: opacity .25s; }
+.loader-step.done .step-time { opacity: 1; }
+
+/* progress bar below steps */
+.loader-bar-wrap { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.loader-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--accent)); border-radius: 2px; transition: width .5s ease; }
+
+/* status line */
+.loader-status { display: flex; align-items: center; gap: 8px; }
+.loader-spinner { width: 14px; height: 14px; border: 1.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
+.loader-status-text { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.loader-elapsed { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-left: auto; }
+
+/* live ticker tags */
+.loader-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.loader-tag { font-family: var(--mono); font-size: 10px; color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
+
+/* ─── RESULTS HEADER ─── */
+.results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.results-count { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+
+/* ─── TRAIN CARD ─── */
+.train-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; transition: border .15s; animation: fadeUp .3s ease both; }
+.train-card:hover { border-color: var(--border2); }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.train-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+.train-name-row { flex: 1; min-width: 0; }
+.train-name { font-size: 14.5px; font-weight: 500; color: var(--text); }
+.train-meta { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 3px; }
+.train-timing { display: flex; align-items: center; gap: 16px; }
+.timing-group { text-align: center; }
+.timing-time { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--text); letter-spacing: -0.5px; }
+.timing-station { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px; }
+.timing-arrow { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.timing-duration { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+.timing-line { width: 60px; height: 1px; background: linear-gradient(90deg, var(--border2), var(--accent), var(--border2)); }
+
+/* ─── AVAIL GRID ─── */
+.avail-section-label { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+.avail-quota-row { margin-bottom: 12px; }
+.avail-quota-title { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.avail-quota-title.tatkal { color: var(--amber); }
+.avail-quota-title.pt { color: var(--red); }
+.avail-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.avail-chip { display: flex; flex-direction: column; gap: 3px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; min-width: 100px; cursor: pointer; transition: border .15s; }
+.avail-chip:hover { border-color: var(--border2); }
+.avail-chip.selected { border-color: rgba(200,240,96,0.35); background: rgba(200,240,96,0.04); }
+.avail-chip.has-avail { border-color: rgba(64,208,160,0.3); background: rgba(64,208,160,0.04); }
+.avail-chip.rac { border-color: rgba(96,168,240,0.25); }
+.avail-chip.bad { border-color: rgba(255,80,80,0.15); }
+.chip-class { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; }
+.chip-status { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.chip-status.cnf { color: var(--teal); }
+.chip-status.rac { color: var(--blue); }
+.chip-status.wl { color: var(--accent); }
+.chip-status.bad { color: var(--red); }
+.chip-status.na { color: var(--text3); }
+.chip-prob { font-family: var(--mono); font-size: 10px; }
+
+/* ─── CONFIRM BAR ─── */
+.confirm-bar-wrap { display: flex; align-items: center; gap: 10px; }
+.confirm-label-small { font-family: var(--mono); font-size: 10px; color: var(--text3); white-space: nowrap; }
+.confirm-bar-bg { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.confirm-bar-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+.confirm-pct { font-family: var(--mono); font-size: 11px; font-weight: 500; white-space: nowrap; }
+
+/* ─── BADGES ─── */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
+.badge-green { background: rgba(64,208,160,0.1); color: var(--teal); border: 1px solid rgba(64,208,160,.2); }
+.badge-amber { background: rgba(255,184,64,0.1); color: var(--amber); border: 1px solid rgba(255,184,64,.2); }
+.badge-red { background: rgba(255,80,80,0.1); color: var(--red); border: 1px solid rgba(255,80,80,.2); }
+.badge-blue { background: rgba(96,168,240,0.1); color: var(--blue); border: 1px solid rgba(96,168,240,.2); }
+.badge-lime { background: rgba(200,240,96,0.1); color: var(--accent); border: 1px solid rgba(200,240,96,.2); }
+.badge-purple { background: rgba(176,128,240,0.1); color: var(--purple); border: 1px solid rgba(176,128,240,.2); }
+.badge-orange { background: rgba(255,140,64,0.1); color: var(--orange); border: 1px solid rgba(255,140,64,.2); }
+
+/* ─── INSIGHT STRIPS ─── */
+.insight-strip { background: rgba(200,240,96,0.05); border: 1px solid rgba(200,240,96,0.15); border-radius: 8px; padding: 10px 14px; margin-top: 10px; display: flex; align-items: flex-start; gap: 10px; }
+.insight-icon { font-size: 13px; margin-top: 1px; flex-shrink: 0; }
+.insight-text { font-size: 12.5px; color: rgba(200,240,96,0.8); line-height: 1.5; }
+.insight-text strong { color: var(--accent); }
+.warn-strip { background: rgba(255,184,64,0.05); border: 1px solid rgba(255,184,64,0.15); border-radius: 8px; padding: 10px 14px; margin-top: 10px; display: flex; align-items: flex-start; gap: 10px; }
+.warn-text { font-size: 12.5px; color: rgba(255,184,64,0.8); line-height: 1.5; }
+.warn-text strong { color: var(--amber); }
+.danger-strip { background: rgba(255,80,80,0.05); border: 1px solid rgba(255,80,80,0.15); border-radius: 8px; padding: 10px 14px; margin-top: 10px; display: flex; align-items: flex-start; gap: 10px; }
+.danger-text { font-size: 12.5px; color: rgba(255,80,80,0.8); line-height: 1.5; }
+.danger-text strong { color: var(--red); }
+.gemini-strip { background: rgba(176,128,240,0.05); border: 1px solid rgba(176,128,240,0.18); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+.gemini-strip-title { font-family: var(--mono); font-size: 10px; color: var(--purple); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+
+/* ─── SPLIT / ROUTE CARDS ─── */
+.split-card { background: var(--bg2); border: 1px solid rgba(96,168,240,0.2); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; animation: fadeUp .3s ease both; }
+.route-option { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; animation: fadeUp .3s ease both; }
+.route-option.best { border-color: rgba(200,240,96,0.25); background: rgba(200,240,96,0.02); }
+.split-legs { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.split-leg { background: var(--bg3); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.leg-route { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.leg-station { font-weight: 500; color: var(--text); }
+.leg-arrow { color: var(--text3); font-size: 12px; }
+.leg-train { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+.leg-timing { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+/* ─── PNR ─── */
+.pnr-input-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: flex-end; }
+.pnr-input-row .field-group { flex: 1; }
+.pnr-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; }
+.pnr-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; gap: 16px; }
+.pnr-number { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: .06em; color: var(--text); }
+.pnr-meta { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-top: 4px; }
+.pnr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.pnr-field { background: var(--bg3); border-radius: 8px; padding: 10px 12px; }
+.pnr-field-label { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+.pnr-field-value { font-size: 13px; font-weight: 500; color: var(--text); }
+.pnr-passengers { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+.pnr-pax-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+.pnr-pax-row:last-child { border-bottom: none; }
+
+/* ─── WATCHLIST ─── */
+.watch-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.watch-pnr { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); min-width: 110px; }
+
+/* ─── TRACKER ─── */
+.tracker-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; }
+.tracker-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+.movement-chart { height: 60px; background: var(--bg3); border-radius: 6px; overflow: hidden; position: relative; margin-top: 8px; }
+.movement-svg { width: 100%; height: 100%; }
+
+/* ─── PREDICTOR ─── */
+.predictor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.predictor-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.predictor-card h4 { font-family: var(--serif); font-size: 15px; font-weight: 300; color: var(--text); margin-bottom: 14px; }
+
+/* ─── INFO BOX ─── */
+.info-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 14px; }
+.info-box h3 { font-family: var(--serif); font-size: 16px; font-weight: 300; color: var(--text); margin-bottom: 10px; }
+.info-box p { color: var(--text2); line-height: 1.7; font-size: 13px; }
+
+/* ─── QUOTA TABLE ─── */
+.quota-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.quota-tbl th { text-align: left; padding: 8px 12px; font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.quota-tbl td { padding: 11px 12px; border-bottom: 1px solid var(--border); color: var(--text2); line-height: 1.5; vertical-align: top; }
+.quota-tbl tr:last-child td { border-bottom: none; }
+
+/* ─── AUTOCOMPLETE ─── */
+.autocomplete-wrap { position: relative; }
+.autocomplete-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; z-index: 100; max-height: 200px; overflow-y: auto; display: none; margin-top: 4px; }
+.autocomplete-dropdown.open { display: block; }
+.autocomplete-item { padding: 9px 13px; cursor: pointer; font-size: 13px; color: var(--text2); transition: background .1s; display: flex; gap: 8px; align-items: center; }
+.autocomplete-item:hover { background: var(--bg4); color: var(--text); }
+.ac-code { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.ac-city { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+/* ─── STAT CARDS ─── */
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.stat-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); }
+.stat-label { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+
+/* ─── MISC ─── */
+.section-head { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .12em; margin: 20px 0 12px; display: flex; align-items: center; gap: 10px; }
+.section-head::after { content:''; flex:1; height:1px; background: var(--border); }
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+.empty-state { text-align: center; padding: 48px 24px; color: var(--text3); }
+.empty-state .empty-icon { font-size: 32px; margin-bottom: 12px; }
+.empty-state p { font-size: 13px; line-height: 1.6; max-width: 320px; margin: 0 auto; }
+.error-strip { background: rgba(255,80,80,0.05); border: 1px solid rgba(255,80,80,0.2); border-radius: 8px; padding: 12px 16px; color: var(--red); font-size: 12.5px; font-family: var(--mono); margin-bottom: 16px; }
+.demo-note { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,184,64,0.08); border: 1px solid rgba(255,184,64,0.2); border-radius: 6px; padding: 6px 12px; font-family: var(--mono); font-size: 11px; color: var(--amber); margin-bottom: 16px; }
+.tip { position: relative; cursor: help; border-bottom: 1px dashed var(--text3); }
+.tip::after { content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #222; border: 1px solid var(--border2); color: var(--text); font-size: 11px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 200; }
+.tip:hover::after { opacity: 1; }
+.swap-btn { background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; color: var(--text2); width: 36px; height: 42px; cursor: pointer; font-size: 16px; transition: all .15s; display: flex; align-items: center; justify-content: center; align-self: flex-end; margin-bottom: 0; }
+.swap-btn:hover { color: var(--text); background: var(--bg4); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); animation: pulse 2s ease-in-out infinite; display: inline-block; margin-right: 4px; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.timeline { padding-left: 28px; position: relative; }
+.timeline::before { content:''; position:absolute; left:8px; top:14px; bottom:14px; width:2px; background:var(--border2); }
+.timeline-stop { position: relative; margin-bottom: 16px; }
+.timeline-dot { position:absolute; left:-24px; top:4px; width:12px; height:12px; border-radius:50%; border:2px solid var(--border2); background:var(--bg); }
+.timeline-dot.origin { border-color:var(--accent); background:rgba(200,240,96,0.2); }
+.timeline-dot.dest { border-color:var(--teal); background:rgba(64,208,160,0.2); }
+.timeline-dot.transfer { border-color:var(--blue); background:rgba(96,168,240,0.15); }
+.timeline-time { font-family:var(--mono); font-size:12px; color:var(--text2); }
+.timeline-station { font-weight:500; font-size:13.5px; color:var(--text); }
+.timeline-train { font-family:var(--mono); font-size:11px; color:var(--text3); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ─── SIDEBAR ─── -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-word">RailRadar</div>
+    <div class="logo-sub">Train Intelligence</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Search</div>
+    <div class="nav-item active" onclick="showPanel('search',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span> Find Trains</div>
+    <div class="nav-item" onclick="showPanel('routes',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span> Route Planner</div>
+    <div class="nav-item" onclick="showPanel('split',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></span> Split Journeys</div>
+  </div>
+
+  <div class="nav-section" style="margin-top:6px">
+    <div class="nav-label">PNR</div>
+    <div class="nav-item" onclick="showPanel('pnr',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></span> PNR Status</div>
+    <div class="nav-item" onclick="showPanel('watchlist',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Watchlist
+      <span id="watch-count" class="nav-badge lime">0</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('tracker',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> WL Tracker
+      <span class="nav-badge purple">LIVE</span>
+    </div>
+  </div>
+
+  <div class="nav-section" style="margin-top:6px">
+    <div class="nav-label">Intelligence</div>
+    <div class="nav-item" onclick="showPanel('predictor',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="12" r="10"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Confirm Predictor</div>
+    <div class="nav-item" onclick="showPanel('quotaguide',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Quota Guide</div>
+  </div>
+
+  <div class="api-status">
+    <div class="api-section-label">Data Sources</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--teal);flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div>
+          <div id="api-indicator" class="api-indicator" style="margin:0;">Checking…</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:1px;">IRCTC via RapidAPI</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--purple);flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <div>
+          <div id="gemini-indicator" class="api-indicator" style="margin:0;">Checking…</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:1px;">Gemini AI advisor</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── MAIN ─── -->
+<main class="main">
+
+<!-- ═══ FIND TRAINS ═══ -->
+<div id="panel-search" class="panel active">
+  <div class="page-title">Find Trains</div>
+  <div class="page-sub">Live availability across General, Tatkal, and Premium Tatkal quotas — with quota type, confirmation probability, and best-class recommendations.</div>
+
+  <div class="search-grid">
+    <div class="field-group">
+      <div class="field-label">From Station</div>
+      <div class="autocomplete-wrap">
+        <input class="field-input" id="s-from" placeholder="e.g. SC, Hyderabad" autocomplete="off" oninput="acInput(this,'s-from-dd')" onblur="acBlur('s-from-dd')">
+        <div class="autocomplete-dropdown" id="s-from-dd"></div>
+      </div>
+    </div>
+    <div class="field-group" style="position:relative">
+      <div class="field-label">To Station</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <button class="swap-btn" onclick="swapStations('s-from','s-to')" title="Swap">⇄</button>
+        <div class="autocomplete-wrap" style="flex:1;">
+          <input class="field-input" id="s-to" placeholder="e.g. MAS, Chennai" autocomplete="off" oninput="acInput(this,'s-to-dd')" onblur="acBlur('s-to-dd')">
+          <div class="autocomplete-dropdown" id="s-to-dd"></div>
+        </div>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Date</div>
+      <input class="field-input" id="s-date" type="date">
+    </div>
+    <button class="btn-primary" onclick="searchTrains()">Search →</button>
+  </div>
+
+  <div style="margin-bottom:16px;">
+    <div class="field-label" style="margin-bottom:6px;">Travel Class</div>
+    <div class="class-tabs">
+      <div class="class-tab active" onclick="selectClass(this,'SL')">SL — Sleeper</div>
+      <div class="class-tab" onclick="selectClass(this,'3A')">3A — Third AC</div>
+      <div class="class-tab" onclick="selectClass(this,'2A')">2A — Second AC</div>
+      <div class="class-tab" onclick="selectClass(this,'1A')">1A — First AC</div>
+      <div class="class-tab" onclick="selectClass(this,'CC')">CC — Chair Car</div>
+      <div class="class-tab" onclick="selectClass(this,'2S')">2S — Second Sitting</div>
+    </div>
+    <div class="field-label" style="margin-bottom:6px;">Quota</div>
+    <div class="quota-tabs">
+      <div class="quota-tab active" onclick="selectQuota(this,'GN')">GN — General</div>
+      <div class="quota-tab tatkal" onclick="selectQuota(this,'TQ')">TQ — Tatkal</div>
+      <div class="quota-tab pt" onclick="selectQuota(this,'PT')">PT — Premium Tatkal</div>
+    </div>
+  </div>
+
+  <div id="search-loader" class="loader">
+    <div class="loader-steps" id="search-loader-steps">
+      <div class="loader-step active" id="ls-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span id="ls-1-text">Fetching trains between stations…</span><span class="step-time" id="ls-1-t"></span></div>
+      <div class="loader-step" id="ls-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span id="ls-2-text">Checking seat availability across classes…</span><span class="step-time" id="ls-2-t"></span></div>
+      <div class="loader-step" id="ls-3"><div class="step-dot"><div class="step-dot-inner"></div></div><span id="ls-3-text">Fetching Tatkal &amp; Premium Tatkal quota…</span><span class="step-time" id="ls-3-t"></span></div>
+      <div class="loader-step" id="ls-4"><div class="step-dot"><div class="step-dot-inner"></div></div><span id="ls-4-text">Computing confirmation probabilities…</span><span class="step-time" id="ls-4-t"></span></div>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar-fill" id="search-loader-bar" style="width:0%"></div></div>
+    <div class="loader-status">
+      <div class="loader-spinner"></div>
+      <div class="loader-status-text" id="search-loader-msg">Initialising search…</div>
+      <div class="loader-elapsed" id="search-loader-elapsed"></div>
+    </div>
+    <div class="loader-tags" id="search-loader-tags"></div>
+  </div>
+  <div id="search-error" class="error-strip" style="display:none;"></div>
+  <div id="search-results"></div>
+</div>
+
+<!-- ═══ ROUTE PLANNER ═══ -->
+<div id="panel-routes" class="panel">
+  <div class="page-title">Route Planner</div>
+  <div class="page-sub">All routes ranked by confirmation probability — direct, alternate origin, longer-segment (PQWL→GNWL upgrade), and multi-train splits. With live availability.</div>
+
+  <div class="search-grid">
+    <div class="field-group">
+      <div class="field-label">Origin</div>
+      <div class="autocomplete-wrap">
+        <input class="field-input" id="r-from" placeholder="e.g. SC, Hyderabad" autocomplete="off" oninput="acInput(this,'r-from-dd')" onblur="acBlur('r-from-dd')">
+        <div class="autocomplete-dropdown" id="r-from-dd"></div>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Destination</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <button class="swap-btn" onclick="swapStations('r-from','r-to')" title="Swap">⇄</button>
+        <div class="autocomplete-wrap" style="flex:1;">
+          <input class="field-input" id="r-to" placeholder="e.g. MAS, Chennai" autocomplete="off" oninput="acInput(this,'r-to-dd')" onblur="acBlur('r-to-dd')">
+          <div class="autocomplete-dropdown" id="r-to-dd"></div>
+        </div>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Date</div>
+      <input class="field-input" id="r-date" type="date">
+    </div>
+    <button class="btn-primary" onclick="planRoutes()">Plan →</button>
+  </div>
+
+  <div id="route-loader" class="loader">
+    <div class="loader-steps">
+      <div class="loader-step active" id="rl-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Fetching direct trains on corridor…</span><span class="step-time" id="rl-1-t"></span></div>
+      <div class="loader-step" id="rl-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Checking alternate origin stations…</span><span class="step-time" id="rl-2-t"></span></div>
+      <div class="loader-step" id="rl-3"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Analysing split options via interchange hubs…</span><span class="step-time" id="rl-3-t"></span></div>
+      <div class="loader-step" id="rl-4"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Ranking all routes by confirmation probability…</span><span class="step-time" id="rl-4-t"></span></div>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar-fill" id="route-loader-bar" style="width:0%"></div></div>
+    <div class="loader-status">
+      <div class="loader-spinner"></div>
+      <div class="loader-status-text" id="route-loader-msg">Building route map…</div>
+      <div class="loader-elapsed" id="route-loader-elapsed"></div>
+    </div>
+  </div>
+  <div id="route-error" class="error-strip" style="display:none;"></div>
+  <div id="route-results"></div>
+</div>
+
+<!-- ═══ SPLIT JOURNEYS ═══ -->
+<div id="panel-split" class="panel">
+  <div class="page-title">Split Journey Finder</div>
+  <div class="page-sub">When your direct segment is PQWL or RLWL, we find better options: longer-segment GNWL upgrade, same-train two-PNR splits, or alternate train combos via interchange hubs.</div>
+
+  <div class="search-grid">
+    <div class="field-group">
+      <div class="field-label">From Station</div>
+      <div class="autocomplete-wrap">
+        <input class="field-input" id="sp-from" placeholder="e.g. SC" autocomplete="off" oninput="acInput(this,'sp-from-dd')" onblur="acBlur('sp-from-dd')">
+        <div class="autocomplete-dropdown" id="sp-from-dd"></div>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Actual Destination</div>
+      <div class="autocomplete-wrap">
+        <input class="field-input" id="sp-to" placeholder="e.g. KPD" autocomplete="off" oninput="acInput(this,'sp-to-dd')" onblur="acBlur('sp-to-dd')">
+        <div class="autocomplete-dropdown" id="sp-to-dd"></div>
+      </div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Date</div>
+      <input class="field-input" id="sp-date" type="date">
+    </div>
+    <button class="btn-primary" onclick="findSplits()">Find →</button>
+  </div>
+  <div style="margin-bottom:16px;">
+    <div class="field-label" style="margin-bottom:6px;">Class</div>
+    <div class="class-tabs" id="split-class-tabs">
+      <div class="class-tab active" onclick="selectSplitClass(this,'SL')">SL</div>
+      <div class="class-tab" onclick="selectSplitClass(this,'3A')">3A</div>
+      <div class="class-tab" onclick="selectSplitClass(this,'2A')">2A</div>
+      <div class="class-tab" onclick="selectSplitClass(this,'1A')">1A</div>
+      <div class="class-tab" onclick="selectSplitClass(this,'CC')">CC</div>
+    </div>
+  </div>
+
+  <div id="split-loader" class="loader">
+    <div class="loader-steps">
+      <div class="loader-step active" id="sl-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Fetching direct availability…</span><span class="step-time" id="sl-1-t"></span></div>
+      <div class="loader-step" id="sl-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Checking longer-segment GNWL options…</span><span class="step-time" id="sl-2-t"></span></div>
+      <div class="loader-step" id="sl-3"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Finding split trains via interchange hubs…</span><span class="step-time" id="sl-3-t"></span></div>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar-fill" id="split-loader-bar" style="width:0%"></div></div>
+    <div class="loader-status">
+      <div class="loader-spinner"></div>
+      <div class="loader-status-text" id="split-loader-msg">Mapping split options…</div>
+      <div class="loader-elapsed" id="split-loader-elapsed"></div>
+    </div>
+  </div>
+  <div id="split-error" class="error-strip" style="display:none;"></div>
+  <div id="split-results"></div>
+</div>
+
+<!-- ═══ PNR STATUS ═══ -->
+<div id="panel-pnr" class="panel">
+  <div class="page-title">PNR Status</div>
+  <div class="page-sub">Live PNR status with confirmation probability, WL position movement, quota analysis, and Gemini advisor. Add to watchlist to monitor automatically.</div>
+
+  <div class="pnr-input-row">
+    <div class="field-group">
+      <div class="field-label">10-Digit PNR Number</div>
+      <input class="field-input" id="pnr-input" placeholder="e.g. 8101234567" maxlength="10" style="font-family:var(--mono);letter-spacing:.06em;">
+    </div>
+    <button class="btn-primary" onclick="checkPNR()">Check →</button>
+    <button class="btn-secondary" onclick="addToWatchlist()">+ Watchlist</button>
+    <button class="btn-secondary" onclick="addToTracker()">+ Tracker</button>
+  </div>
+
+  <div id="pnr-loader" class="loader">
+    <div class="loader-steps">
+      <div class="loader-step active" id="pl-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Fetching PNR status from IRCTC…</span><span class="step-time" id="pl-1-t"></span></div>
+      <div class="loader-step" id="pl-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Parsing passenger &amp; booking details…</span><span class="step-time" id="pl-2-t"></span></div>
+      <div class="loader-step" id="pl-3"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Computing confirmation probability…</span><span class="step-time" id="pl-3-t"></span></div>
+    </div>
+    <div class="loader-bar-wrap"><div class="loader-bar-fill" id="pnr-loader-bar" style="width:0%"></div></div>
+    <div class="loader-status">
+      <div class="loader-spinner"></div>
+      <div class="loader-status-text" id="pnr-loader-msg">Looking up PNR…</div>
+      <div class="loader-elapsed" id="pnr-loader-elapsed"></div>
+    </div>
+  </div>
+  <div id="pnr-error" class="error-strip" style="display:none;"></div>
+  <div id="pnr-result"></div>
+</div>
+
+<!-- ═══ WATCHLIST ═══ -->
+<div id="panel-watchlist" class="panel">
+  <div class="page-title">PNR Watchlist</div>
+  <div class="page-sub">Track multiple waitlisted PNRs. Refresh to get current status and updated confirmation probabilities.</div>
+  <div style="display:flex;gap:10px;margin-bottom:20px;">
+    <button class="btn-primary" onclick="refreshWatchlistAll()">↻ Refresh All</button>
+    <button class="btn-secondary" onclick="clearWatchlist()">Clear All</button>
+  </div>
+  <div id="watchlist-content"></div>
+</div>
+
+<!-- ═══ WL TRACKER ═══ -->
+<div id="panel-tracker" class="panel">
+  <div class="page-title">Waitlist Movement Tracker</div>
+  <div class="page-sub">Track WL position changes over time. Each refresh records a data point — the movement chart shows whether your ticket is moving toward confirmation.</div>
+
+  <div style="display:flex;gap:10px;margin-bottom:20px;align-items:flex-end;">
+    <div class="field-group" style="flex:1;">
+      <div class="field-label">Add PNR to Track</div>
+      <input class="field-input" id="tracker-pnr-input" placeholder="10-digit PNR" maxlength="10" style="font-family:var(--mono);">
+    </div>
+    <button class="btn-primary" onclick="addTrackerPNR()">Track →</button>
+    <button class="btn-secondary" onclick="clearTracker()">Clear All</button>
+  </div>
+  <div id="tracker-content"></div>
+
+  <div class="info-box" style="margin-top:20px;">
+    <h3>Reading the movement chart</h3>
+    <p>The chart plots WL position over time — lower is better (closer to confirmation). A steep downward slope is good. Flat line means no cancellations on your quota. Key cancellation windows: <strong style="color:var(--text)">T-120h → T-72h → T-24h → T-4h (chart prep)</strong>. If GNWL and moving 3+ positions/day within 5 days of departure, odds are good. PQWL with no movement = book an alternative.</p>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM PREDICTOR ═══ -->
+<div id="panel-predictor" class="panel">
+  <div class="page-title">Confirmation Predictor</div>
+  <div class="page-sub">Statistical probability model — estimates confirmation likelihood based on quota type, WL position, class, days-to-departure, and route demand. No external API is used here; this is a calibrated model. For IRCTC's own probability (when available), see the <strong style="color:var(--accent)">Find Trains</strong> chips — those labelled <span style="color:var(--teal);font-family:var(--mono);font-size:11px">IRCTC</span> are real data.</div>
+
+  <div class="predictor-grid">
+    <div class="predictor-card">
+      <h4>Predict for a booking</h4>
+      <div class="field-group" style="margin-bottom:12px;">
+        <div class="field-label">Quota Type</div>
+        <select class="field-input" id="pred-quota" onchange="runPredictor()">
+          <option value="GNWL">GNWL — General Waitlist</option>
+          <option value="RAC">RAC — Reservation Against Cancellation</option>
+          <option value="PQWL">PQWL — Pooled Quota Waitlist</option>
+          <option value="RLWL">RLWL — Remote Location Waitlist</option>
+          <option value="TQWL">TQWL — Tatkal Waitlist</option>
+          <option value="RQWL">RQWL — Request Waitlist</option>
+        </select>
+      </div>
+      <div class="field-group" style="margin-bottom:12px;">
+        <div class="field-label">WL Position</div>
+        <input class="field-input" id="pred-pos" type="number" min="1" max="300" value="15" oninput="runPredictor()">
+      </div>
+      <div class="field-group" style="margin-bottom:12px;">
+        <div class="field-label">Days to Departure</div>
+        <input class="field-input" id="pred-days" type="number" min="0" max="120" value="7" oninput="runPredictor()">
+      </div>
+      <div class="field-group" style="margin-bottom:12px;">
+        <div class="field-label">Class</div>
+        <select class="field-input" id="pred-class" onchange="runPredictor()">
+          <option value="SL">SL — Sleeper (high movement)</option>
+          <option value="3A">3A — Third AC</option>
+          <option value="2A">2A — Second AC</option>
+          <option value="1A">1A — First AC (low movement)</option>
+          <option value="CC">CC — Chair Car</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Route Type</div>
+        <select class="field-input" id="pred-route" onchange="runPredictor()">
+          <option value="popular">Popular corridor (HYD–MAS, DEL–BOM etc.)</option>
+          <option value="moderate">Moderate demand</option>
+          <option value="lean">Low demand / off-season</option>
+        </select>
+      </div>
+    </div>
+    <div class="predictor-card" id="pred-result-card">
+      <h4>Prediction result</h4>
+      <div id="pred-result" style="color:var(--text3);font-size:13px;">Adjust inputs on the left — result updates live.</div>
+    </div>
+  </div>
+
+  <div class="section-head">Quota comparison at current inputs</div>
+  <div id="pred-comparison"></div>
+
+  <div class="info-box" style="margin-top:16px;">
+    <h3>Statistical model — not IRCTC data</h3>
+    <p>This predictor uses a statistical model, <strong style="color:var(--text)">not</strong> live IRCTC data. Base rates: GNWL ~72%, PQWL ~28%, RLWL ~18%, TQWL ~6%, RQWL ~4%. Adjusted for WL position (exponential decay), days to departure (cancellation windows at T-120h, T-72h, T-24h, T-4h), class (SL confirms fastest, 1A slowest), and route demand. For train-specific real probabilities from IRCTC, use <strong style="color:var(--text)">Find Trains</strong> — when the API returns a probability it's shown as <span style="color:var(--teal);font-family:var(--mono);font-size:11px">IRCTC</span> on each chip.</p>
+  </div>
+</div>
+
+<!-- ═══ QUOTA GUIDE ═══ -->
+<div id="panel-quotaguide" class="panel">
+  <div class="page-title">Quota &amp; Waitlist Guide</div>
+  <div class="page-sub">India's train reservation system decoded — quotas, waitlists, the longer-route trick, and timing strategies.</div>
+
+  <div class="info-box">
+    <h3>How confirmation works</h3>
+    <p>When a seat is booked, the ticket enters a <strong style="color:var(--text)">quota-specific waitlist</strong>. Cancellations only free up seats within the same quota — a GNWL cancellation never moves a PQWL ticket up. This is why GNWL 40 often confirms before PQWL 5. Priority order: CNF > RAC > GNWL > RLWL > PQWL > TQWL > RQWL.</p>
+  </div>
+
+  <table class="quota-tbl">
+    <thead><tr><th>Code</th><th>Full Name</th><th>Assigned when</th><th>Confirm chance</th><th>Strategy</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--teal);font-family:var(--mono);">CNF</td><td>Confirmed</td><td>Seats available at booking</td><td><span class="badge badge-green">100%</span></td><td>Berth assigned at chart prep (~4h before dep).</td></tr>
+      <tr><td style="color:var(--blue);font-family:var(--mono);">RAC</td><td>Reservation Against Cancellation</td><td>All CNF seats full</td><td><span class="badge badge-green">~92%</span></td><td>Always better than WL. Travel guaranteed (shared berth). Almost always upgrades to full berth.</td></tr>
+      <tr><td style="color:var(--accent);font-family:var(--mono);">GNWL</td><td>General Waitlist</td><td>Origin or primary station booking</td><td><span class="badge badge-lime">~72% (pos &lt;30)</span></td><td>Best WL type. Clears from any cancellation on the train. Peak releases: T-72h and T-24h.</td></tr>
+      <tr><td style="color:var(--amber);font-family:var(--mono);">PQWL</td><td>Pooled Quota Waitlist</td><td>Both board and deboard at intermediate stations</td><td><span class="badge badge-amber">~28%</span></td><td>Shared with many intermediate stops. <strong style="color:var(--text)">Book to terminal for GNWL instead</strong>. Extra cost ₹80–250.</td></tr>
+      <tr><td style="color:var(--orange);font-family:var(--mono);">RLWL</td><td>Remote Location Waitlist</td><td>Remote intermediate stations</td><td><span class="badge badge-amber">~18%</span></td><td>Only clears from same remote-station cancellations. If &gt; RLWL 5, book alternative now.</td></tr>
+      <tr><td style="color:var(--red);font-family:var(--mono);">TQWL</td><td>Tatkal Waitlist</td><td>Tatkal quota overflow</td><td><span class="badge badge-red">~6%</span></td><td>Almost never confirms. Book something else immediately.</td></tr>
+      <tr><td style="color:var(--red);font-family:var(--mono);">RQWL</td><td>Request Waitlist</td><td>Intermediate→intermediate, no dedicated quota</td><td><span class="badge badge-red">~4%</span></td><td>Treat as unconfirmed. Use split journey finder.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="divider"></div>
+
+  <div class="info-box">
+    <h3>The longer-route trick: PQWL → GNWL</h3>
+    <p>If you travel <strong style="color:var(--text)">HYD → Katpadi</strong> on a train from Hyderabad to Chennai: booking <strong style="color:var(--accent)">HYD → Chennai</strong> gives you GNWL (origin quota, huge pool). Booking <strong style="color:var(--amber)">HYD → Katpadi</strong> gives PQWL (tiny shared pool). You can deboard at Katpadi — the ticket is valid. Extra cost: ₹80–250. Confirmation probability: roughly doubles.</p>
+  </div>
+  <div class="info-box">
+    <h3>Tatkal &amp; Premium Tatkal</h3>
+    <p>Tatkal opens 1 day before departure (AC classes) or 1 day before (SL). Premium Tatkal is dynamic pricing — prices increase as seats fill. Both have no WL — if the seat isn't available at the time of booking, it's a flat REGRET. For same-day travel, always check Tatkal first. Tatkal charges: SL ₹100–200 extra, AC ₹300–500+ extra.</p>
+  </div>
+  <div class="info-box">
+    <h3>Cancellation windows to watch</h3>
+    <p><strong style="color:var(--text)">T-120h:</strong> Passengers with backup bookings cancel — good GNWL movement.<br>
+    <strong style="color:var(--text)">T-72h:</strong> Flights/buses finalized — major cancellation wave.<br>
+    <strong style="color:var(--text)">T-24h:</strong> Last-minute plan changes.<br>
+    <strong style="color:var(--text)">T-4h:</strong> Chart preparation — VIP, defence, foreign tourist quota released back. GNWL can jump significantly.</p>
+  </div>
+  <div class="info-box">
+    <h3>Hyderabad: three stations, three quotas</h3>
+    <p>SC (Secunderabad), HYB (Hyderabad Deccan), and KCG (Kacheguda) each anchor different trains with independent quota allocations. If SC shows PQWL, check HYB or KCG — the quota type can be entirely different on trains originating from there.</p>
+  </div>
+</div>
+
+</main>
+</div>
+
+<datalist id="station-list">
+  <option value="SC">Secunderabad</option>
+  <option value="HYB">Hyderabad</option>
+  <option value="KCG">Kacheguda</option>
+  <option value="MAS">Chennai Central</option>
+  <option value="KPD">Katpadi</option>
+  <option value="BZA">Vijayawada</option>
+  <option value="NDLS">New Delhi</option>
+  <option value="BCT">Mumbai Central</option>
+  <option value="SBC">Bangalore City</option>
+  <option value="YPR">Yesvantpur</option>
+  <option value="NGP">Nagpur</option>
+  <option value="HWH">Howrah</option>
+</datalist>
+
+<script src="config.js"></script>
+<script>
+// ═══════════════════════════════════════════
+// ── ENV CONFIG ─────────────────────────────────────────────────────────────
+// Keys are injected here at deploy time (e.g. via a build script reading .env).
+// Set RAPIDAPI_KEY and GEMINI_API_KEY in your .env file; the values below are
+// replaced automatically.  Never commit real keys to source control.
+// Keys are read from config.js (a sibling file — never commit it).
+// config.js must define: window.RAILRADAR_CONFIG = { RAPIDAPI_KEY: '...', GEMINI_API_KEY: '...' }
+const _cfg = window.RAILRADAR_CONFIG || {};
+let API_KEY    = _cfg.RAPIDAPI_KEY   || '';
+let GEMINI_KEY = _cfg.GEMINI_API_KEY || '';
+let selectedClass = 'SL';
+let selectedQuota = 'GN';
+let selectedSplitClass = 'SL';
+let watchlist = JSON.parse(localStorage.getItem('railradar_watchlist') || '[]');
+let trackerData = JSON.parse(localStorage.getItem('railradar_tracker') || '[]');
+let lastPNRResult = null;
+let _lastTrains = null, _lastDate = null, _lastFrom = null, _lastTo = null;
+
+// ─── STATIONS ──────────────────────────────
+const STATIONS = [
+  {code:'SC',name:'Secunderabad Junction',city:'Hyderabad'},{code:'HYB',name:'Hyderabad Deccan',city:'Hyderabad'},
+  {code:'KCG',name:'Kacheguda',city:'Hyderabad'},{code:'MAS',name:'Chennai Central',city:'Chennai'},
+  {code:'MSB',name:'Chennai Beach',city:'Chennai'},{code:'KPD',name:'Katpadi Junction',city:'Vellore'},
+  {code:'BZA',name:'Vijayawada Junction',city:'Vijayawada'},{code:'NDLS',name:'New Delhi',city:'Delhi'},
+  {code:'NZM',name:'Hazrat Nizamuddin',city:'Delhi'},{code:'BCT',name:'Mumbai Central',city:'Mumbai'},
+  {code:'CSTM',name:'Chhatrapati Shivaji Terminus',city:'Mumbai'},{code:'LTT',name:'Lokmanya Tilak Terminus',city:'Mumbai'},
+  {code:'SBC',name:'KSR Bengaluru City',city:'Bangalore'},{code:'YPR',name:'Yesvantpur Junction',city:'Bangalore'},
+  {code:'GTL',name:'Guntakal Junction',city:'Guntakal'},{code:'RU',name:'Renigunta Junction',city:'Tirupati'},
+  {code:'TPT',name:'Tirupati',city:'Tirupati'},{code:'GNT',name:'Guntur Junction',city:'Guntur'},
+  {code:'WL',name:'Warangal',city:'Warangal'},{code:'KZJ',name:'Kazipet Junction',city:'Warangal'},
+  {code:'BPQ',name:'Balharshah',city:'Chandrapur'},{code:'NGP',name:'Nagpur Junction',city:'Nagpur'},
+  {code:'HWH',name:'Howrah Junction',city:'Kolkata'},{code:'PNBE',name:'Patna Junction',city:'Patna'},
+  {code:'LKO',name:'Lucknow',city:'Lucknow'},{code:'AGC',name:'Agra Cantt',city:'Agra'},
+  {code:'PUNE',name:'Pune Junction',city:'Pune'},{code:'CBE',name:'Coimbatore Junction',city:'Coimbatore'},
+  {code:'MDU',name:'Madurai Junction',city:'Madurai'},{code:'ED',name:'Erode Junction',city:'Erode'},
+  {code:'SA',name:'Salem Junction',city:'Salem'},{code:'AWY',name:'Arakkonam Junction',city:'Arakkonam'},
+  {code:'JU',name:'Jodhpur Junction',city:'Jodhpur'},{code:'JP',name:'Jaipur Junction',city:'Jaipur'},
+  {code:'ADI',name:'Ahmedabad Junction',city:'Ahmedabad'},{code:'VSKP',name:'Visakhapatnam',city:'Vizag'},
+  {code:'TPTY',name:'Tirupati',city:'Tirupati'},{code:'NLR',name:'Nellore',city:'Nellore'},
+  {code:'OGL',name:'Ongole',city:'Ongole'},{code:'TEL',name:'Tenali Junction',city:'Tenali'},
+];
+const STATION_NAMES = {};
+STATIONS.forEach(s => { STATION_NAMES[s.code] = s.name; });
+
+const CITY_STATIONS = {
+  'HYDERABAD': ['SC','HYB','KCG'], 'CHENNAI': ['MAS','MSB'],
+  'BANGALORE': ['SBC','YPR'], 'DELHI': ['NDLS','NZM'],
+  'MUMBAI': ['BCT','CSTM','LTT'],
+};
+
+// ─── CORRIDOR HUBS ───────────────────────────
+// Maps corridor → intermediate hubs for split journeys
+const CORRIDOR_HUBS = {
+  'SC-MAS': ['BZA','GTL','RU','KPD'],
+  'HYB-MAS': ['BZA','GTL','RU','KPD'],
+  'KCG-MAS': ['BZA','GTL','KPD'],
+  'SC-SBC': ['GTL','RU'],
+  'HYB-SBC': ['GTL','SBC'],
+  'MAS-SBC': ['KPD','SA','ED'],
+  'SC-NDLS': ['NGP','BPQ','LKO'],
+  'MAS-NDLS': ['BZA','NGP','LKO'],
+  'SC-BCT': ['NGP','PUNE'],
+  'HYB-BCT': ['NGP','PUNE'],
+  'SBC-NDLS': ['NGP','LKO'],
+};
+
+function corridorHubs(from, to) {
+  const key = from + '-' + to;
+  const rkey = to + '-' + from;
+  return CORRIDOR_HUBS[key] || CORRIDOR_HUBS[rkey] || ['BZA','KPD','NGP','GTL'];
+}
+
+// ─── DEMO TRAINS ────────────────────────────
+const DEMO_TRAINS = {
+  'SC-MAS': [
+    {trainNo:'12603',trainName:'Hyderabad – Chennai Express',dep:'17:30',arr:'06:00',duration:'12h 30m',days:'Daily'},
+    {trainNo:'17229',trainName:'Sabari Express',dep:'07:10',arr:'20:40',duration:'13h 30m',days:'Daily'},
+    {trainNo:'12605',trainName:'Pallavan Express',dep:'16:30',arr:'04:45',duration:'12h 15m',days:'Daily'},
+    {trainNo:'12659',trainName:'Gurudev Express',dep:'21:15',arr:'09:20',duration:'12h 05m',days:'Mon,Wed,Fri'},
+    {trainNo:'22693',trainName:'Rajdhani Express',dep:'06:50',arr:'15:55',duration:'9h 05m',days:'Mon,Thu,Sat'},
+  ],
+  'SC-BZA': [
+    {trainNo:'12737',trainName:'Goutami Express',dep:'06:30',arr:'11:15',duration:'4h 45m',days:'Daily'},
+    {trainNo:'17201',trainName:'Golconda Express',dep:'15:00',arr:'19:45',duration:'4h 45m',days:'Daily'},
+    {trainNo:'12511',trainName:'Raptisagar Express',dep:'21:00',arr:'02:00+1',duration:'5h 00m',days:'Fri,Sun'},
+  ],
+  'BZA-MAS': [
+    {trainNo:'12613',trainName:'Vasco Express',dep:'13:30',arr:'21:45',duration:'8h 15m',days:'Daily'},
+    {trainNo:'12625',trainName:'Kerala Express',dep:'02:00',arr:'10:30',duration:'8h 30m',days:'Daily'},
+    {trainNo:'12839',trainName:'Howrah Mail',dep:'06:30',arr:'15:00',duration:'8h 30m',days:'Daily'},
+  ],
+  'SC-SBC': [
+    {trainNo:'12785',trainName:'AP Sampark Kranti',dep:'06:30',arr:'12:10',duration:'5h 40m',days:'Daily'},
+    {trainNo:'17603',trainName:'Prashanti Exp',dep:'08:00',arr:'14:05',duration:'6h 05m',days:'Daily'},
+    {trainNo:'22681',trainName:'SBC Rajdhani',dep:'20:00',arr:'05:55+1',duration:'9h 55m',days:'Mon,Thu'},
+  ],
+  'MAS-SBC': [
+    {trainNo:'12607',trainName:'Lalbagh Express',dep:'06:20',arr:'11:40',duration:'5h 20m',days:'Daily'},
+    {trainNo:'12639',trainName:'Brindavan Express',dep:'07:50',arr:'13:15',duration:'5h 25m',days:'Daily'},
+  ],
+  'SC-NDLS': [
+    {trainNo:'12723',trainName:'AP Express',dep:'06:35',arr:'08:10+1',duration:'25h 35m',days:'Daily'},
+    {trainNo:'20421',trainName:'Vande Bharat',dep:'06:00',arr:'20:00',duration:'14h 00m',days:'Daily'},
+  ],
+  'SC-NGP': [
+    {trainNo:'12771',trainName:'Secunderabad Nagpur SF',dep:'23:00',arr:'07:55+1',duration:'8h 55m',days:'Daily'},
+    {trainNo:'17005',trainName:'Hyderabad Express',dep:'17:00',arr:'03:00+1',duration:'10h 00m',days:'Daily'},
+  ],
+  'NGP-NDLS': [
+    {trainNo:'12621',trainName:'Tamil Nadu SF Express',dep:'05:45',arr:'17:00',duration:'11h 15m',days:'Daily'},
+    {trainNo:'12809',trainName:'Mumbai Howrah Mail',dep:'06:30',arr:'17:30',duration:'11h 00m',days:'Daily'},
+  ],
+};
+
+function getDemoTrains(from, to) {
+  const key = from + '-' + to;
+  const rkey = to + '-' + from;
+  return DEMO_TRAINS[key] || DEMO_TRAINS[rkey] || [
+    {trainNo:'12001',trainName:`${from}–${to} Express`,dep:'07:00',arr:'19:00',duration:'12h 00m',days:'Daily'},
+    {trainNo:'12002',trainName:`${from}–${to} Mail`,dep:'23:00',arr:'11:00+1',duration:'12h 00m',days:'Daily'},
+  ];
+}
+
+// ═══════════════════════════════════════════
+//  API LAYER
+// ═══════════════════════════════════════════
+const RAPIDAPI_HOST = 'irctc1.p.rapidapi.com';
+
+async function apiCall(endpoint, params) {
+  if (!API_KEY) throw new Error('NO_KEY');
+  const url = new URL('https://' + RAPIDAPI_HOST + endpoint);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.append(k, v));
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'X-RapidAPI-Key': API_KEY, 'X-RapidAPI-Host': RAPIDAPI_HOST }
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}: ${errText.slice(0, 120)}`);
+  }
+  const json = await res.json();
+  // For availability endpoints, status:false means "no data for this combo" — callers handle it
+  // For all other endpoints, surface the API's own error message
+  if (json.status === false && !endpoint.includes('checkSeatAvailability')) {
+    throw new Error(json.message || 'API returned status:false');
+  }
+  return json;
+}
+
+// Formats date as DD-MM-YYYY for IRCTC API
+function fmtDateDMY(iso) {
+  const [y,m,d] = iso.split('-');
+  return `${d}-${m}-${y}`;
+}
+// Formats date as YYYYMMDD
+function fmtDate(iso) { return iso.replace(/-/g, ''); }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─── AVAILABILITY NORMALIZATION ───────────────
+// v2 /checkSeatAvailability response has TWO shapes depending on the train:
+//
+// Shape A – flat array (some trains):
+//   { status:true, data: [ { availablity_date, current_status, ticket_fare, cp_percentage, ... } ] }
+//
+// Shape B – nested object (image 3, most trains):
+//   { status:true, data: { trainCode, availabilityClassList: [
+//       { reservationClass:"2A", charges:{totalFare:1595,...},
+//         availabilities: [ {date:"2026-04-18", status:"GNWL29/WL15", type:"WL", prediction:0}, ... ]
+//       }
+//   ]}}
+//
+// parseV2Response handles both and returns { status, fare, apiCp } for the queried class+date.
+
+function parseV2Response(av, cls, isoDate) {
+  if (!av || av.status === false) return { status: 'N/A', fare: null, apiCp: null };
+  const data = av.data;
+  if (!data) return { status: 'N/A', fare: null, apiCp: null };
+
+  // Normalise a date string to YYYY-MM-DD for comparison
+  const toISO = s => {
+    s = String(s || '').trim();
+    const dmy = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+    return s; // assume already ISO or close enough
+  };
+
+  // ── Shape B: data is an object with availabilityClassList ──
+  if (data && typeof data === 'object' && !Array.isArray(data) && data.availabilityClassList) {
+    const clsEntry = data.availabilityClassList.find(
+      c => String(c.reservationClass || '').toUpperCase() === String(cls || '').toUpperCase()
+    );
+    if (!clsEntry) return { status: 'N/A', fare: null, apiCp: null };
+
+    const fare = clsEntry.charges?.totalFare || clsEntry.charges?.totalCollectibleAmount || null;
+
+    // Find the availability entry for the queried date
+    const avails = clsEntry.availabilities || [];
+    let avEntry = avails.find(a => toISO(a.date) === isoDate);
+    if (!avEntry && avails.length) avEntry = avails[0]; // fallback
+    if (!avEntry) return { status: 'N/A', fare, apiCp: null };
+
+    const rawStatus = avEntry.status || '';
+    // prediction field is 0-100 integer (percent) in Shape B
+    const apiCp = (avEntry.prediction != null && avEntry.prediction > 0) ? Number(avEntry.prediction) : null;
+    return { status: normalizeAvailStatus(rawStatus), fare, apiCp };
+  }
+
+  // ── Shape A: data is a flat array ──
+  if (Array.isArray(data)) {
+    let entry = isoDate
+      ? data.find(e => toISO(e.availablity_date || e.date || '') === isoDate)
+      : null;
+    if (!entry && data.length) entry = data[0];
+    if (!entry) return { status: 'N/A', fare: null, apiCp: null };
+
+    const rawStatus = entry.availablity_status || entry.current_status || entry.avl_status || '';
+    const fare = entry.total_fare || entry.ticket_fare || null;
+    const apiCp = entry.cp_percentage != null ? Number(entry.cp_percentage)
+                : entry.confirm_probability_percent ? Number(entry.confirm_probability_percent)
+                : null;
+    return { status: normalizeAvailStatus(rawStatus), fare, apiCp };
+  }
+
+  return { status: 'N/A', fare: null, apiCp: null };
+}
+
+// Legacy stub — callers now use parseV2Response directly
+function extractAvailStatus(av, dmy) { return ''; }
+function parseAvailEntry(av, dmy) { return {}; }
+
+function normalizeAvailStatus(raw) {
+  if (!raw) return 'N/A';
+  raw = String(raw).trim().toUpperCase();
+  // "AVL-45", "AVL 45", "AVAILABLE-45" → "CNF 45"
+  if (raw.startsWith('AVL') || raw.startsWith('AVAILABLE')) {
+    const n = raw.match(/\d+/);
+    return n ? `CNF ${n[0]}` : 'CNF';
+  }
+  if (raw === 'CONFIRM' || raw === 'CNF') return 'CNF';
+  if (raw.includes('REGRET') || raw.includes('NOT AVAILABLE') || raw === 'NA' || raw === 'N/A') return 'N/A';
+  if (raw.startsWith('RAC')) { const n = raw.match(/\d+/); return n ? `RAC ${n[0]}` : 'RAC'; }
+  // WL types: slash-separated (GNWL/18/16) or dash (GNWL-18) or space
+  const gnwl = raw.match(/GNWL[\/-](\d+)/); if (gnwl) return `GNWL ${gnwl[1]}`;
+  const pqwl = raw.match(/PQWL[\/-](\d+)/); if (pqwl) return `PQWL ${pqwl[1]}`;
+  const rlwl = raw.match(/RLWL[\/-](\d+)/); if (rlwl) return `RLWL ${rlwl[1]}`;
+  const tqwl = raw.match(/(?:TQWL|CKWL)[\/-](\d+)/); if (tqwl) return `TQWL ${tqwl[1]}`;
+  const rqwl = raw.match(/RQWL[\/-](\d+)/); if (rqwl) return `RQWL ${rqwl[1]}`;
+  const rlgn = raw.match(/RLGN[\/-](\d+)/); if (rlgn) return `RLWL ${rlgn[1]}`;
+  // Generic WL/18 or WL-18
+  const wl = raw.match(/^WL[\/-](\d+)/); if (wl) return `GNWL ${wl[1]}`;
+  // If it already looks normalized (e.g. "GNWL 18")
+  if (/^(GNWL|PQWL|RLWL|TQWL|RQWL|RAC|CNF)\s+\d+/.test(raw)) return raw.slice(0, 20);
+  return raw.slice(0, 20);
+}
+
+function parseWLType(s) {
+  if (!s) return null;
+  s = String(s).toUpperCase().trim();
+  if (s.startsWith('CNF') || s.startsWith('AVL') || s.startsWith('AVAILABLE')) return 'CNF';
+  if (s.includes('GNWL') || (s.startsWith('WL') && !s.includes('PQWL') && !s.includes('RLWL'))) return 'GNWL';
+  if (s.includes('PQWL')) return 'PQWL';
+  if (s.includes('RLWL') || s.includes('RLGN')) return 'RLWL';
+  if (s.includes('TQWL') || s.includes('CKWL')) return 'TQWL';
+  if (s.includes('RQWL')) return 'RQWL';
+  if (s.includes('RAC')) return 'RAC';
+  if (s === 'N/A' || s.includes('REGRET') || s.includes('NOT AVAILABLE')) return null;
+  return null;
+}
+
+function parseWLPosition(s) {
+  if (!s) return null;
+  const m = String(s).match(/\d+/g);
+  return m ? parseInt(m[0]) : null;
+}
+
+// ─── SIMULATION (demo mode) ───────────────────
+const AVAIL_SEEDS = [
+  {status:'CNF 42',quota:'GN'},{status:'CNF 12',quota:'GN'},{status:'RAC 3',quota:'GN'},
+  {status:'GNWL 8',quota:'GNWL'},{status:'GNWL 22',quota:'GNWL'},{status:'GNWL 45',quota:'GNWL'},
+  {status:'PQWL 6',quota:'PQWL'},{status:'PQWL 18',quota:'PQWL'},{status:'RLWL 4',quota:'RLWL'},
+  {status:'N/A',quota:''},{status:'GNWL 12',quota:'GNWL'},{status:'CNF 8',quota:'GN'},
+  {status:'RAC 7',quota:'GN'},{status:'GNWL 35',quota:'GNWL'},{status:'TQWL 3',quota:'TQWL'},
+];
+function simulateAvailability(seed, cls, from, to) {
+  const idx = ((seed * 7 + cls.charCodeAt(0) * 3 + (from.charCodeAt(0)||0)) % AVAIL_SEEDS.length);
+  return AVAIL_SEEDS[Math.abs(idx)];
+}
+function simulateTatkalAvail(seed, cls) {
+  const opts = [
+    {status:'CNF 4',quota:'TQ'},{status:'CNF 2',quota:'TQ'},{status:'N/A',quota:'TQ'},
+    {status:'TQWL 2',quota:'TQ'},{status:'CNF 1',quota:'TQ'},{status:'N/A',quota:'TQ'},
+  ];
+  return opts[Math.abs(seed) % opts.length];
+}
+function simulatePremTatkalAvail(seed, cls) {
+  const opts = [
+    {status:'CNF 2',quota:'PT'},{status:'N/A',quota:'PT'},{status:'CNF 1',quota:'PT'},
+    {status:'N/A',quota:'PT'},{status:'CNF 3',quota:'PT'},{status:'N/A',quota:'PT'},
+  ];
+  return opts[Math.abs(seed + 3) % opts.length];
+}
+
+// ═══════════════════════════════════════════
+//  PROBABILITY MODEL
+// ═══════════════════════════════════════════
+function confirmationProbability(quotaType, wlPosition, daysOut, cls, routeType) {
+  if (!quotaType) return 0;   // N/A — no data, don't show as 100%
+  if (quotaType === 'CNF') return 1.0;
+  if (quotaType === 'RAC') return 0.92;
+  const pos = wlPosition || 0;
+  const days = daysOut || 7;
+  const base = { GNWL: 0.72, PQWL: 0.28, RLWL: 0.18, TQWL: 0.06, RQWL: 0.04 };
+  let prob = base[quotaType] || 0.05;
+
+  // Position decay
+  if (quotaType === 'GNWL') {
+    if (pos <= 5) prob *= 0.99;
+    else if (pos <= 10) prob *= 0.95;
+    else if (pos <= 20) prob *= 0.88;
+    else if (pos <= 35) prob *= 0.70;
+    else if (pos <= 50) prob *= 0.48;
+    else if (pos <= 80) prob *= 0.28;
+    else if (pos <= 120) prob *= 0.14;
+    else prob *= 0.06;
+  } else if (quotaType === 'PQWL') {
+    if (pos <= 3) prob *= 0.85;
+    else if (pos <= 7) prob *= 0.65;
+    else if (pos <= 15) prob *= 0.40;
+    else if (pos <= 25) prob *= 0.20;
+    else prob *= 0.08;
+  } else if (quotaType === 'RLWL') {
+    if (pos <= 3) prob *= 0.85;
+    else if (pos <= 5) prob *= 0.60;
+    else if (pos <= 10) prob *= 0.30;
+    else prob *= 0.08;
+  } else if (quotaType === 'TQWL') {
+    if (pos <= 2) prob *= 0.70;
+    else prob *= 0.20;
+  }
+
+  // Time factor — cancellation windows
+  if (days === 0) prob = Math.min(prob * 1.35, 0.97); // chart prep
+  else if (days <= 1) prob *= 1.20; // T-24h window
+  else if (days <= 3) prob *= 1.10;
+  else if (days <= 5) prob *= 1.05;
+  else if (days > 60) prob *= 0.75;
+  else if (days > 30) prob *= 0.85;
+
+  // Class factor
+  const classMult = { SL: 1.15, '3A': 1.0, '2A': 0.90, '1A': 0.75, CC: 1.08, '2S': 1.10 };
+  prob *= (classMult[cls] || 1.0);
+
+  // Route demand
+  const routeMult = { popular: 0.90, moderate: 1.0, lean: 1.20 };
+  prob *= (routeMult[routeType] || 1.0);
+
+  return Math.min(Math.max(prob, 0.02), 0.97);
+}
+
+function probColor(p) {
+  if (p >= 0.75) return 'var(--teal)';
+  if (p >= 0.50) return 'var(--accent)';
+  if (p >= 0.30) return 'var(--amber)';
+  return 'var(--red)';
+}
+function probLabel(p) {
+  if (p >= 0.75) return '&#10003;';
+  if (p >= 0.50) return '&#8776;';
+  if (p >= 0.30) return '!';
+  return '&#10005;';
+}
+
+// ═══════════════════════════════════════════
+//  GEMINI INTEGRATION
+// ═══════════════════════════════════════════
+const _geminiCache = {};
+
+async function callGemini(prompt, maxTokens = 400) {
+  if (!GEMINI_KEY) return null;
+  const cacheKey = prompt.slice(0, 100);
+  if (_geminiCache[cacheKey]) return _geminiCache[cacheKey];
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: maxTokens }
+        })
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    _geminiCache[cacheKey] = raw;
+    return raw;
+  } catch { return null; }
+}
+
+async function getGeminiAdvice(quotaType, wlPos, daysOut, cls, routeType, extraCtx) {
+  const quotaFacts = {
+    GNWL: 'GNWL (General Waitlist) — origin station quota. Best type. Clears from all cancellations on the train.',
+    PQWL: 'PQWL (Pooled Quota) — intermediate boarding. Only clears from intermediate-station cancellations. Shares pool with many stops.',
+    RLWL: 'RLWL (Remote Location) — remote station quota. Only clears from same remote-station cancellations. Very rarely confirms beyond position 5.',
+    TQWL: 'TQWL (Tatkal Waitlist) — Tatkal quota overflow. Almost never clears.',
+    RQWL: 'RQWL (Request Waitlist) — special quota. Very rarely confirms.',
+    RAC: 'RAC — guaranteed travel (shared berth). Almost always upgrades.',
+  };
+  const classFacts = {
+    SL: 'Sleeper — highest volume, most movement.',
+    '3A': 'Third AC — moderate movement.',
+    '2A': 'Second AC — slower movement.',
+    '1A': 'First AC — minimal movement.',
+    CC: 'Chair Car — moderate movement.',
+  };
+  const prompt = `You are a concise Indian Railways advisor. A passenger has:
+- Quota: ${quotaFacts[quotaType] || quotaType}
+- WL position: ${wlPos}
+- Days to departure: ${daysOut}
+- Class: ${classFacts[cls] || cls}
+- Route demand: ${routeType === 'popular' ? 'High (e.g. HYD–MAS, DEL–BOM)' : routeType === 'moderate' ? 'Moderate' : 'Low/off-season'}
+${extraCtx ? `- Context: ${extraCtx}` : ''}
+
+You do NOT have real-time IRCTC data. Give honest, specific advice about the quota system only.
+Respond ONLY with JSON (no markdown):
+{"situation":"<2 sentences: what this quota means for them and if their position is good/borderline/unlikely>","what_to_watch":"<1-2 sentences: what to monitor and when>","action":"<1 concrete action sentence>"}`;
+  const raw = await callGemini(prompt, 300);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw.replace(/```json|```/gi, '').trim());
+  } catch { return null; }
+}
+
+async function getGeminiRouteAnalysis(from, to, directStatus, splitOptions) {
+  if (!GEMINI_KEY) return null;
+  const prompt = `You are an Indian Railways travel expert. A passenger wants to travel ${from} → ${to}.
+Direct route status: ${directStatus}
+Alternative options: ${JSON.stringify(splitOptions.map(o => ({type: o.type, label: o.label, legs: o.legs.map(l => ({route: l.from+'→'+l.to, status: l.status}))})))}
+
+Analyze which option is genuinely best and why. Consider: quota type, split journey risks, Tatkal as backup.
+Respond ONLY with JSON (no markdown):
+{"recommendation":"<option label or 'direct'>","why":"<2 sentences>","risk":"<1 sentence: biggest risk>","tatkal_tip":"<1 sentence about Tatkal if relevant>"}`;
+  const raw = await callGemini(prompt, 350);
+  if (!raw) return null;
+  try { return JSON.parse(raw.replace(/```json|```/gi, '').trim()); } catch { return null; }
+}
+
+function geminiSpinner(id, label = 'Gemini is analyzing…') {
+  return `<div id="${id}" class="gemini-strip">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="spinner" style="border-top-color:var(--purple);width:14px;height:14px;border-width:2px;"></div>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--purple);">${label}</span>
+    </div>
+  </div>`;
+}
+
+function renderGeminiAdvice(g) {
+  if (!g) return '';
+  return `<div class="gemini-strip">
+    <div class="gemini-strip-title"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Gemini Advisor</div>
+    ${g.situation ? `<p style="font-size:12.5px;color:var(--text2);margin-bottom:8px;line-height:1.6;">${g.situation}</p>` : ''}
+    ${g.what_to_watch ? `<p style="font-size:12px;color:var(--text3);margin-bottom:8px;line-height:1.5;"><strong style="color:var(--text2)">Watch:</strong> ${g.what_to_watch}</p>` : ''}
+    ${g.action ? `<div style="background:rgba(176,128,240,0.1);border-radius:6px;padding:8px 12px;font-size:12.5px;color:rgba(200,160,255,0.9);">→ ${g.action}</div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
+function showPanel(name, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+}
+
+function saveApiKey(val) {
+  API_KEY = val.trim();
+  localStorage.setItem('rapidapi_key', API_KEY);
+  const ind = document.getElementById('api-indicator');
+  ind.textContent = API_KEY ? '● API key saved — live mode' : '● No key — demo mode';
+  ind.style.color = API_KEY ? 'var(--teal)' : 'var(--text3)';
+}
+
+function saveGeminiKey(val) {
+  GEMINI_KEY = val.trim();
+  localStorage.setItem('railradar_gemini_key', GEMINI_KEY);
+  const ind = document.getElementById('gemini-indicator');
+  ind.textContent = GEMINI_KEY ? '● Gemini active — AI advisor on' : '● No key — static advice only';
+  ind.style.color = GEMINI_KEY ? 'var(--purple)' : 'var(--text3)';
+}
+
+function selectClass(el, cls) {
+  document.querySelectorAll('.class-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedClass = cls;
+  if (_lastTrains && _lastDate) renderTrainResults(_lastTrains, _lastDate, _lastFrom, _lastTo);
+}
+
+function selectQuota(el, q) {
+  document.querySelectorAll('.quota-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedQuota = q;
+  if (_lastTrains && _lastDate) renderTrainResults(_lastTrains, _lastDate, _lastFrom, _lastTo);
+}
+
+function selectSplitClass(el, cls) {
+  document.querySelectorAll('#split-class-tabs .class-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedSplitClass = cls;
+}
+
+function swapStations(id1, id2) {
+  const a = document.getElementById(id1), b = document.getElementById(id2);
+  [a.value, b.value] = [b.value, a.value];
+}
+
+function emptyState(title, desc) {
+  return `<div class="empty-state"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><p><strong style="color:var(--text2)">${title}</strong><br>${desc}</p></div>`;
+}
+
+function daysUntil(dateStr) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr); d.setHours(0,0,0,0);
+  return Math.max(0, Math.round((d - today) / 86400000));
+}
+
+function quotaBadge(qt) {
+  const map = {
+    GNWL: 'badge-lime', PQWL: 'badge-amber', RLWL: 'badge-orange',
+    TQWL: 'badge-red', RQWL: 'badge-red', RAC: 'badge-blue',
+    CNF: 'badge-green', TQ: 'badge-amber', PT: 'badge-red'
+  };
+  return `<span class="badge ${map[qt] || 'badge-blue'}">${qt}</span>`;
+}
+
+function formatRunDays(d) {
+  if (!d) return 'Daily';
+  if (typeof d === 'string') return d;
+  if (typeof d === 'object') {
+    const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const vals = Object.entries(d).filter(([,v]) => v).map(([k]) => labels[parseInt(k)-1] || k);
+    return vals.join(', ') || 'Daily';
+  }
+  return String(d);
+}
+
+// ─── AUTOCOMPLETE ─────────────────────────────
+function acInput(input, ddId) {
+  const val = input.value.trim().toUpperCase();
+  const dd = document.getElementById(ddId);
+  if (!val || val.length < 1) { dd.classList.remove('open'); return; }
+  const matches = STATIONS.filter(s =>
+    s.code.startsWith(val) || s.name.toUpperCase().includes(val) || s.city.toUpperCase().includes(val)
+  ).slice(0, 8);
+  if (!matches.length) { dd.classList.remove('open'); return; }
+  dd.innerHTML = matches.map(s =>
+    `<div class="autocomplete-item" onmousedown="acSelect('${input.id}','${ddId}','${s.code}')">
+      <span class="ac-code">${s.code}</span><span>${s.name}</span><span class="ac-city">${s.city}</span>
+    </div>`
+  ).join('');
+  dd.classList.add('open');
+}
+
+function acBlur(ddId) { setTimeout(() => document.getElementById(ddId).classList.remove('open'), 200); }
+function acSelect(inputId, ddId, code) {
+  document.getElementById(inputId).value = code;
+  document.getElementById(ddId).classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
+//  SEARCH TRAINS
+// ═══════════════════════════════════════════
+async function searchTrains() {
+  const from = document.getElementById('s-from').value.trim().toUpperCase();
+  const to = document.getElementById('s-to').value.trim().toUpperCase();
+  const date = document.getElementById('s-date').value;
+  if (!from || !to || !date) {
+    document.getElementById('search-error').textContent = 'Please fill in all fields.';
+    document.getElementById('search-error').style.display = 'block'; return;
+  }
+
+  const errEl = document.getElementById('search-error');
+  const results = document.getElementById('search-results');
+  errEl.style.display = 'none';
+  results.innerHTML = '';
+  setLoaderStep('ls', 1);
+  document.getElementById('search-loader').classList.add('visible');
+  startLoaderElapsed('search');
+
+  try {
+    let trains;
+
+    if (!API_KEY) {
+      // ─── DEMO MODE ───
+      await sleep(600);
+      const allClasses = ['SL','3A','2A','1A','CC'];
+      trains = getDemoTrains(from, to).map((t, i) => {
+        const gnAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulateAvailability(i * 7 + ci, cls, from, to), quota: 'GN' }));
+        const tqAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulateTatkalAvail(i * 5 + ci, cls), quota: 'TQ' }));
+        const ptAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulatePremTatkalAvail(i * 3 + ci, cls), quota: 'PT' }));
+        return { ...t, fromStation: from, toStation: to, gnAvail, tqAvail, ptAvail };
+      });
+    } else {
+      // ─── LIVE MODE ───
+      setLoaderStep('ls', 1, 'Fetching trains between stations…');
+      const data = await apiCall('/api/v3/trainBetweenStations', {
+        fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
+      });
+      if (!data?.data?.length) {
+        results.innerHTML = emptyState('No trains found', 'Try different stations or date. Make sure to use station codes (e.g. SC, MAS).');
+        return;
+      }
+
+      trains = data.data.map(t => ({
+        trainNo: t.train_number || t.trainNo,
+        trainName: t.train_name || t.trainName || 'Train',
+        // Use the actual boarding/alighting codes the API returns for this train on this route.
+        // Falling back to the user's search codes only if missing.
+        fromStation: t.from_station_code || t.from || t.from_stn_code || from,
+        toStation: t.to_station_code || t.to || t.to_stn_code || to,
+        dep: t.from_std || t.departureTime || '--:--',
+        arr: t.to_std || t.arrivalTime || '--:--',
+        duration: t.duration || '--',
+        days: formatRunDays(t.run_days || t.runningDays),
+        gnAvail: [], tqAvail: [], ptAvail: []
+      }));
+
+      setLoaderStep('ls', 2, 'Checking seat availability (General quota)…');
+      const allClasses = ['SL','3A','2A','1A','CC'];
+      const dmy = date; // v2 API expects ISO format YYYY-MM-DD
+
+      // Pre-fetch valid classes per train using GetTrainClasses endpoint
+      // This avoids wasting quota on classes a train doesn't support (which return N/A anyway)
+      const trainClassMap = {};
+      await Promise.all(trains.map(async tr => {
+        try {
+          const tc = await apiCall('/api/v1/getTrainClasses', { trainNo: tr.trainNo });
+          // Response: { data: { classes: ['SL','3A',...] } } or similar
+          const classes = tc?.data?.classes || tc?.data?.classList || tc?.data;
+          if (Array.isArray(classes) && classes.length) {
+            trainClassMap[tr.trainNo] = classes.map(c => String(c).trim().toUpperCase()).filter(c => allClasses.includes(c));
+          }
+        } catch { /* fallback: query all classes */ }
+      }));
+
+      // Fetch GN, TQ, PT availability in parallel per train
+      for (let ti = 0; ti < trains.length; ti++) {
+        const tr = trains[ti];
+        // Use only the classes this train actually has; fall back to all if lookup failed
+        const trainClasses = (trainClassMap[tr.trainNo]?.length) ? trainClassMap[tr.trainNo] : allClasses;
+        setLoaderStep('ls', 2, `Availability: train ${ti+1}/${trains.length}…`);
+
+        const [gnResults, tqResults, ptResults] = await Promise.all([
+          // General quota
+          Promise.all(trainClasses.map(async cls => {
+            try {
+              const av = await apiCall('/api/v2/checkSeatAvailability', {
+                classType: cls, fromStationCode: tr.fromStation, quota: 'GN',
+                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
+              });
+              const parsed = parseV2Response(av, cls, dmy);
+              return { class: cls, ...parsed, quota: 'GN' };
+            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'GN' }; }
+          })),
+          // Tatkal quota
+          Promise.all(trainClasses.map(async cls => {
+            try {
+              const av = await apiCall('/api/v2/checkSeatAvailability', {
+                classType: cls, fromStationCode: tr.fromStation, quota: 'TQ',
+                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
+              });
+              const parsed = parseV2Response(av, cls, dmy);
+              return { class: cls, ...parsed, quota: 'TQ' };
+            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'TQ' }; }
+          })),
+          // Premium Tatkal
+          Promise.all(trainClasses.map(async cls => {
+            try {
+              const av = await apiCall('/api/v2/checkSeatAvailability', {
+                classType: cls, fromStationCode: tr.fromStation, quota: 'PT',
+                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
+              });
+              const parsed = parseV2Response(av, cls, dmy);
+              return { class: cls, ...parsed, quota: 'PT' };
+            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'PT' }; }
+          }))
+        ]);
+
+        tr.gnAvail = gnResults;
+        tr.tqAvail = tqResults;
+        tr.ptAvail = ptResults;
+        await sleep(300); // rate limit buffer
+      }
+    }
+
+    setLoaderStep('ls', 4, 'Computing confirmation probabilities…');
+    _lastTrains = trains; _lastDate = date; _lastFrom = from; _lastTo = to;
+    renderTrainResults(trains, date, from, to);
+
+  } catch(e) {
+    if (e.message === 'NO_KEY') {
+      // Shouldn't reach here but handle gracefully
+      results.innerHTML = emptyState('API key required', 'Add your RapidAPI key in the sidebar.');
+    } else {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  } finally {
+    document.getElementById('search-loader').classList.remove('visible');
+    stopLoaderElapsed('search');
+  }
+}
+
+function setLoaderStep(prefix, step, text) {
+  const total = prefix === 'sl' ? 3 : 4;
+  for (let i = 1; i <= total; i++) {
+    const el = document.getElementById(`${prefix}-${i}`);
+    if (!el) continue;
+    el.classList.remove('active', 'done');
+    if (i < step) el.classList.add('done');
+    else if (i === step) el.classList.add('active');
+    // stamp elapsed time on done steps
+    const tel = document.getElementById(`${prefix}-${i}-t`);
+    if (tel && i < step && !tel.textContent) tel.textContent = '';
+  }
+  if (text && document.getElementById(`${prefix}-${step}-text`)) {
+    document.getElementById(`${prefix}-${step}-text`).textContent = text;
+  }
+  // update progress bar + status message
+  const barEl = document.getElementById(`${prefix === 'ls' ? 'search' : prefix === 'rl' ? 'route' : prefix === 'sl' ? 'split' : 'pnr'}-loader-bar`);
+  const msgEl = document.getElementById(`${prefix === 'ls' ? 'search' : prefix === 'rl' ? 'route' : prefix === 'sl' ? 'split' : 'pnr'}-loader-msg`);
+  if (barEl) barEl.style.width = Math.round((step - 1) / total * 85 + 5) + '%';
+  if (msgEl && text) msgEl.textContent = text;
+}
+
+function renderTrainResults(trains, date, from, to) {
+  const results = document.getElementById('search-results');
+  if (!trains?.length) { results.innerHTML = emptyState('No trains found', 'Try different stations.'); return; }
+  const days = daysUntil(date);
+  const allClasses = ['SL','3A','2A','1A','CC'];
+
+  // Determine which avail set to show based on selectedQuota
+  function getAvailSet(tr) {
+    if (selectedQuota === 'TQ') return tr.tqAvail || [];
+    if (selectedQuota === 'PT') return tr.ptAvail || [];
+    return tr.gnAvail || [];
+  }
+
+  // Sort trains by best probability in selected quota + class
+  function getBestProb(tr) {
+    const avail = getAvailSet(tr).find(a => a.class === selectedClass);
+    if (!avail) return 0;
+    const qt = parseWLType(avail.status);
+    const wp = parseWLPosition(avail.status);
+    return confirmationProbability(qt, wp, days, selectedClass, 'popular');
+  }
+
+  trains.sort((a,b) => getBestProb(b) - getBestProb(a));
+
+  const demoNote = !API_KEY ? `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode — add RapidAPI key in .env for live data. Showing simulated availability.</div>` : '';
+
+  let html = demoNote + `<div class="results-header">
+    <div class="results-count"><span class="live-dot"></span>${trains.length} trains · ${days} days out · sorted by ${selectedQuota} confirmation probability</div>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${selectedClass} · ${selectedQuota === 'GN' ? 'General' : selectedQuota === 'TQ' ? 'Tatkal' : 'Premium Tatkal'}</span>
+  </div>`;
+
+  const geminiJobs = [];
+
+  trains.forEach((tr, i) => {
+    const gnSet = tr.gnAvail || [];
+    const tqSet = tr.tqAvail || [];
+    const ptSet = tr.ptAvail || [];
+
+    const selGn = gnSet.find(a => a.class === selectedClass) || { status: 'N/A' };
+    const selTq = tqSet.find(a => a.class === selectedClass) || { status: 'N/A' };
+    const selPt = ptSet.find(a => a.class === selectedClass) || { status: 'N/A' };
+
+    const selQt = parseWLType(selGn.status);
+    const selWp = parseWLPosition(selGn.status);
+    const selIsLive = selGn.apiCp != null;
+    const selProb = selIsLive ? selGn.apiCp / 100 : confirmationProbability(selQt, selWp, days, selectedClass, 'popular');
+    const selPct = Math.round(selProb * 100);
+    const selSrcTag = selIsLive
+      ? `<span style="font-family:var(--mono);font-size:9px;color:var(--teal);margin-left:6px;opacity:.9">IRCTC live</span>`
+      : `<span style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:6px;opacity:.7">model est.</span>`;
+
+    // Best class across all GN
+    const bestCls = gnSet
+      .filter(a => a.status !== 'N/A')
+      .map(a => {
+        const qt = parseWLType(a.status);
+        const wp = parseWLPosition(a.status);
+        return { ...a, prob: confirmationProbability(qt, wp, days, a.class, 'popular') };
+      })
+      .sort((a,b) => b.prob - a.prob)[0];
+
+    // GN class chips
+    const gnChips = allClasses.map(cls => {
+      const a = gnSet.find(x => x.class === cls) || { status: 'N/A' };
+      return renderChip(cls, a.status, days, i === 0 && cls === selectedClass ? 'highlight' : '', '', a.fare, a.apiCp);
+    }).join('');
+
+    // TQ chips (only show if any have availability)
+    const tqHasAny = tqSet.some(a => a.status !== 'N/A' && !a.status.includes('N/A'));
+    const tqChips = tqHasAny ? allClasses.map(cls => {
+      const a = tqSet.find(x => x.class === cls) || { status: 'N/A' };
+      return renderChip(cls, a.status, 1, '', 'TQ', a.fare, a.apiCp);
+    }).join('') : '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">No Tatkal availability for this train</span>';
+
+    const ptHasAny = ptSet.some(a => a.status !== 'N/A' && !a.status.includes('N/A'));
+    const ptChips = ptHasAny ? allClasses.map(cls => {
+      const a = ptSet.find(x => x.class === cls) || { status: 'N/A' };
+      return renderChip(cls, a.status, 1, '', 'PT', a.fare, a.apiCp);
+    }).join('') : '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">No Premium Tatkal availability</span>';
+
+    // Confirmation bar for selected class GN
+    let confirmSection = '';
+    if (selQt && selQt !== 'CNF' && selQt !== 'RAC') {
+      confirmSection = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;">
+            <div class="confirm-bar-wrap">
+              <div class="confirm-label-small">${selectedClass} GN confirmation${selSrcTag}</div>
+              <div class="confirm-bar-bg"><div class="confirm-bar-fill" style="width:${selPct}%;background:${probColor(selProb)};"></div></div>
+              <div class="confirm-pct" style="color:${probColor(selProb)}">${probLabel(selProb)} ${selPct}%</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${quotaBadge(selQt)}
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">WL ${selWp || '?'} · ${days}d out</span>
+            ${bestCls && bestCls.class !== selectedClass && parseWLType(bestCls.status) === 'CNF'
+              ? `<span class="badge badge-purple"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:3px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${bestCls.class} confirmed</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    } else if (selQt === 'CNF') {
+      const seats = selGn.status.match(/\d+/);
+      confirmSection = `<div style="margin-top:10px;"><span class="badge badge-green" style="font-size:12px;padding:5px 12px;">&#10003; ${selectedClass} — ${seats ? seats[0]+' confirmed seats' : 'Confirmed seats available'}</span>${selTq.status !== 'N/A' && parseWLType(selTq.status) === 'CNF' ? ` <span class="badge badge-amber" style="font-size:12px;padding:5px 12px;">TQ also available</span>` : ''}</div>`;
+    } else if (selQt === 'RAC') {
+      confirmSection = `<div style="margin-top:10px;"><span class="badge badge-blue" style="font-size:12px;padding:5px 12px;">≈ RAC — travel guaranteed, likely upgrades to berth</span></div>`;
+    }
+
+    // Insight
+    let insight = '';
+    const cardId = `tc-${i}`;
+    if (selQt && selQt !== 'CNF' && selQt !== 'RAC' && selQt !== 'TQWL') {
+      if (GEMINI_KEY) {
+        insight = geminiSpinner(cardId, 'Gemini analyzing your booking…');
+        geminiJobs.push({ cardId, quotaType: selQt, wlPosition: selWp, daysOut: days, cls: selectedClass });
+      } else {
+        if (selQt === 'PQWL') {
+          insight = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>PQWL tip:</strong> Intermediate quota — pools with many stops. Consider booking to the terminal station for GNWL (cost: ~₹150–250 extra). Confirmation odds roughly double. Use Split Journey Finder.</span></div>`;
+        } else if (selQt === 'RLWL' && selWp > 5) {
+          insight = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>RLWL risk:</strong> Remote location quota only clears from same-station cancellations — extremely rare. If RLWL &gt; 5, consider an alternative route or Tatkal.</span></div>`;
+        } else if (selQt === 'GNWL' && selWp <= 20) {
+          insight = `<div class="insight-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="insight-text"><strong>Good position:</strong> GNWL ${selWp} with ${days} days out. Peak cancellations at T-72h and T-24h. Check status at those windows — movement expected.</span></div>`;
+        } else if (selQt === 'GNWL' && selWp > 50) {
+          insight = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="warn-text"><strong>High WL position:</strong> GNWL ${selWp} is risky. Check if other trains on this route have better availability, or consider Tatkal.</span></div>`;
+        }
+      }
+    } else if (selQt === 'TQWL') {
+      insight = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span><span class="danger-text"><strong>Tatkal WL:</strong> TQWL almost never confirms. Consider General quota WL or a different train/route.</span></div>`;
+    }
+
+    html += `<div class="train-card" style="animation-delay:${i*50}ms">
+      <div class="train-top">
+        <div class="train-name-row">
+          <div class="train-name">${tr.trainName}</div>
+          <div class="train-meta">${tr.trainNo} · ${tr.days || 'Daily'} · ${tr.fromStation} → ${tr.toStation}</div>
+        </div>
+        <div class="train-timing">
+          <div class="timing-group">
+            <div class="timing-time">${tr.dep || '--'}</div>
+            <div class="timing-station">${tr.fromStation}</div>
+          </div>
+          <div class="timing-arrow">
+            <div class="timing-duration">${tr.duration || ''}</div>
+            <div class="timing-line"></div>
+          </div>
+          <div class="timing-group">
+            <div class="timing-time">${tr.arr || '--'}</div>
+            <div class="timing-station">${tr.toStation}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="avail-quota-row">
+        <div class="avail-quota-title">General Quota (GN)</div>
+        <div class="avail-chips">${gnChips}</div>
+      </div>
+
+      <div class="avail-quota-row">
+        <div class="avail-quota-title tatkal"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Tatkal (TQ) — opens 1 day before departure</div>
+        <div class="avail-chips">${tqChips}</div>
+      </div>
+
+      <div class="avail-quota-row">
+        <div class="avail-quota-title pt" style="color:var(--red);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Premium Tatkal (PT) — dynamic pricing</div>
+        <div class="avail-chips">${ptChips}</div>
+      </div>
+
+      ${confirmSection}
+      ${insight}
+    </div>`;
+  });
+
+  results.innerHTML = html;
+
+  // Fire Gemini jobs
+  const seen = new Set();
+  geminiJobs.forEach(job => {
+    const key = `${job.quotaType}_${Math.round((job.wlPosition||0)/5)*5}_${Math.round(job.daysOut/3)*3}_${job.cls}`;
+    const el = document.getElementById(job.cardId);
+    if (!seen.has(key) && el) {
+      seen.add(key);
+      (async () => {
+        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', null);
+        if (el) el.outerHTML = renderGeminiAdvice(g) || '';
+      })();
+    } else if (el) {
+      setTimeout(async () => {
+        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', null);
+        const target = document.getElementById(job.cardId);
+        if (target) target.outerHTML = renderGeminiAdvice(g) || '';
+      }, 1200);
+    }
+  });
+}
+
+function renderChip(cls, status, days, extra, quotaLabel, fare, apiCp) {
+  const qt = parseWLType(status);
+  const wp = parseWLPosition(status);
+  // Prefer the API's own CP% (from IRCTC data) over our local model
+  const isLive = apiCp != null;
+  const prob = isLive ? apiCp / 100 : confirmationProbability(qt, wp, days, cls, 'popular');
+  const pct = Math.round(prob * 100);
+  const isSelected = cls === selectedClass && !quotaLabel;
+  // Small source tag: "IRCTC" when real, "est." when model
+  const srcTag = isLive
+    ? `<span style="font-family:var(--mono);font-size:9px;color:var(--teal);opacity:.8;margin-left:2px">IRCTC</span>`
+    : `<span style="font-family:var(--mono);font-size:9px;color:var(--text3);opacity:.7;margin-left:2px">est.</span>`;
+
+  let chipClass2 = '';
+  let statusHtml = '';
+  const fareHtml = fare ? `<div class="chip-prob" style="color:var(--text3)">₹${fare}</div>` : '';
+
+  if (qt === 'CNF') {
+    chipClass2 = 'has-avail';
+    const seats = status.match(/\d+/);
+    statusHtml = `<div class="chip-status cnf">${seats ? seats[0]+' seats' : 'Open'}</div>${fareHtml}`;
+  } else if (qt === 'RAC') {
+    chipClass2 = 'rac';
+    statusHtml = `<div class="chip-status rac">${status}</div>${fareHtml}`;
+  } else if (qt && qt !== 'CNF') {
+    chipClass2 = pct < 30 ? 'bad' : '';
+    statusHtml = `<div class="chip-status wl" style="color:${probColor(prob)}">${status}</div><div class="chip-prob" style="color:${probColor(prob)}">${pct}%${srcTag}${fare ? ` · ₹${fare}` : ''}</div>`;
+  } else {
+    statusHtml = `<div class="chip-status na">N/A</div>`;
+  }
+
+  return `<div class="avail-chip ${chipClass2} ${isSelected ? 'selected' : ''}">
+    <div class="chip-class" style="${isSelected ? 'color:var(--accent)' : ''}">${cls}${quotaLabel ? ' '+quotaLabel : ''}${isSelected ? ' ●' : ''}</div>
+    ${statusHtml}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  ROUTE PLANNER
+// ═══════════════════════════════════════════
+async function planRoutes() {
+  const from = document.getElementById('r-from').value.trim().toUpperCase();
+  const to = document.getElementById('r-to').value.trim().toUpperCase();
+  const date = document.getElementById('r-date').value;
+  if (!from || !to || !date) return;
+
+  const errEl = document.getElementById('route-error');
+  const results = document.getElementById('route-results');
+  errEl.style.display = 'none';
+  results.innerHTML = '';
+  document.getElementById('route-loader').classList.add('visible');
+  startLoaderElapsed('route');
+
+  try {
+    const days = daysUntil(date);
+    const hubs = corridorHubs(from, to);
+    const fromCity = expandCity(from);
+    const toCity = expandCity(to);
+    const dmy = date; // v2 API expects ISO YYYY-MM-DD
+    const allClasses = ['SL','3A','2A','1A','CC'];
+
+    const routes = [];
+
+    // ─── 1. Direct trains ───
+    setLoaderStep('rl', 1, 'Fetching direct trains on corridor…');
+    let directTrains = [];
+    if (API_KEY) {
+      try {
+        const data = await apiCall('/api/v3/trainBetweenStations', {
+          fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
+        });
+        directTrains = (data?.data || []).map(t => ({
+          trainNo: t.train_number || t.trainNo,
+          trainName: t.train_name || t.trainName || 'Train',
+          fromStation: t.from_station_code || t.from || from,
+          toStation: t.to_station_code || t.to || to,
+          dep: t.from_std || '--', arr: t.to_std || '--', duration: t.duration || '--', days: formatRunDays(t.run_days)
+        }));
+      } catch { directTrains = getDemoTrains(from, to); }
+    } else {
+      await sleep(400);
+      directTrains = getDemoTrains(from, to);
+    }
+
+    // Fetch availability for top 3 direct trains
+    for (let i = 0; i < Math.min(3, directTrains.length); i++) {
+      const t = directTrains[i];
+      // Use actual boarding/alighting codes from the API (e.g. train may board at CHZ not SC)
+      const boardAt = t.fromStation || from;
+      const alightAt = t.toStation || to;
+      let status = 'N/A';
+      if (API_KEY) {
+        try {
+          const av = await apiCall('/api/v2/checkSeatAvailability', {
+            trainNo: t.trainNo, fromStationCode: boardAt, toStationCode: alightAt,
+            classType: selectedClass, quota: 'GN', date: dmy
+          });
+          status = normalizeAvailStatus(parseV2Response(av, selectedClass, dmy).status);
+        } catch { status = simulateAvailability(i, selectedClass, from, to).status; }
+      } else {
+        status = simulateAvailability(i, selectedClass, from, to).status;
+      }
+      const qt = parseWLType(status);
+      const wp = parseWLPosition(status);
+      const prob = confirmationProbability(qt, wp, days, selectedClass, 'popular');
+      routes.push({
+        type: 'direct', label: 'Direct train',
+        score: prob, trainNo: t.trainNo, trainName: t.trainName,
+        legs: [{ from: boardAt, to: alightAt, train: `${t.trainNo} ${t.trainName}`, dep: t.dep, arr: t.arr, status, quota: qt || 'GN' }],
+        totalTime: t.duration, transfers: 0, days: t.days
+      });
+
+      // Longer segment option: if PQWL, suggest booking to terminal
+      if (qt === 'PQWL' || qt === 'RLWL') {
+        const gnwlPos = Math.max(1, (wp || 15) + 8);
+        const termStatus = `GNWL ${gnwlPos}`;
+        const termProb = confirmationProbability('GNWL', gnwlPos, days, selectedClass, 'popular');
+        routes.push({
+          type: 'longer-segment',
+          label: `Book ${from}→ terminus on ${t.trainNo} — GNWL instead of ${qt}`,
+          score: termProb,
+          legs: [{ from, to: `${to} → terminal`, train: `${t.trainNo} ${t.trainName}`, dep: t.dep, arr: t.arr, status: termStatus, quota: 'GNWL' }],
+          totalTime: t.duration, transfers: 0,
+          note: `Book to train's terminus → get GNWL (origin quota) instead of ${qt}. Deboard at ${to}. Extra cost ~₹150–250. Confirmation probability ${Math.round(termProb*100)}% vs ${Math.round(prob*100)}%.`
+        });
+      }
+    }
+
+    // ─── 2. Alternate origin stations ───
+    setLoaderStep('rl', 2, 'Checking alternate origin stations…');
+    await sleep(200);
+
+    for (const altFrom of fromCity.filter(s => s !== from).slice(0, 2)) {
+      let altStatus = 'N/A';
+      const altTrains = getDemoTrains(altFrom, to);
+      if (altTrains.length) {
+        if (API_KEY) {
+          try {
+            const av = await apiCall('/api/v2/checkSeatAvailability', {
+              trainNo: altTrains[0].trainNo, fromStationCode: altFrom, toStationCode: to,
+              classType: selectedClass, quota: 'GN', date: dmy
+            });
+            altStatus = normalizeAvailStatus(parseV2Response(av, selectedClass, dmy).status);
+          } catch { altStatus = simulateAvailability(20, selectedClass, altFrom, to).status; }
+        } else {
+          altStatus = simulateAvailability(20, selectedClass, altFrom, to).status;
+        }
+        const qt = parseWLType(altStatus);
+        const wp = parseWLPosition(altStatus);
+        const prob = confirmationProbability(qt, wp, days, selectedClass, 'popular');
+        const t = altTrains[0];
+        routes.push({
+          type: 'alternate-origin',
+          label: `Board from ${altFrom} — ${STATION_NAMES[altFrom] || altFrom}`,
+          score: prob,
+          legs: [{ from: altFrom, to, train: `${t.trainNo} ${t.trainName}`, dep: t.dep, arr: t.arr, status: altStatus, quota: qt || 'GN' }],
+          totalTime: t.duration, transfers: 0,
+          note: `${altFrom} has an independent quota pool. If ${from} shows ${qt || 'WL'}, ${altFrom} may show GNWL instead — different allocation on the same train.`
+        });
+      }
+    }
+
+    // ─── 3. Split via hubs ───
+    setLoaderStep('rl', 3, 'Analysing split options via interchange hubs…');
+
+    for (const hub of hubs.slice(0, 3)) {
+      let leg1Trains = [], leg2Trains = [];
+      if (API_KEY) {
+        try {
+          const d1 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: from, toStationCode: hub, dateOfJourney: fmtDate(date) });
+          leg1Trains = (d1?.data || []).map(t => ({ trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train', dep: t.from_std || '--', arr: t.to_std || '--' }));
+        } catch {}
+        await sleep(150);
+        try {
+          const d2 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: hub, toStationCode: to, dateOfJourney: fmtDate(date) });
+          leg2Trains = (d2?.data || []).map(t => ({ trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train', dep: t.from_std || '--', arr: t.to_std || '--' }));
+        } catch {}
+      } else {
+        leg1Trains = getDemoTrains(from, hub);
+        leg2Trains = getDemoTrains(hub, to);
+      }
+
+      const leg1T = leg1Trains[0], leg2T = leg2Trains[0];
+      if (!leg1T || !leg2T) continue;
+
+      let s1 = 'N/A', s2 = 'N/A';
+      if (API_KEY) {
+        [s1, s2] = await Promise.all([
+          fetchLegAvailability(leg1T.trainNo, from, hub, selectedClass, 'GN', dmy),
+          fetchLegAvailability(leg2T.trainNo, hub, to, selectedClass, 'GN', dmy)
+        ]);
+      } else {
+        s1 = simulateAvailability(30, selectedClass, from, hub).status;
+        s2 = simulateAvailability(40, selectedClass, hub, to).status;
+      }
+
+      const p1 = confirmationProbability(parseWLType(s1), parseWLPosition(s1), days, selectedClass, 'popular');
+      const p2 = confirmationProbability(parseWLType(s2), parseWLPosition(s2), days, selectedClass, 'popular');
+
+      routes.push({
+        type: 'split-2train',
+        label: `Split via ${STATION_NAMES[hub] || hub} (${hub})`,
+        score: p1 * p2,
+        legs: [
+          { from, to: hub, train: `${leg1T.trainNo} ${leg1T.trainName}`, dep: leg1T.dep, arr: leg1T.arr, status: s1, quota: parseWLType(s1) || 'GN' },
+          { from: hub, to, train: `${leg2T.trainNo} ${leg2T.trainName}`, dep: leg2T.dep, arr: leg2T.arr, status: s2, quota: parseWLType(s2) || 'GN' }
+        ],
+        totalTime: 'Multi-leg', transfers: 1, interchange: STATION_NAMES[hub] || hub,
+        note: `Two separate PNRs. ${STATION_NAMES[hub] || hub} is a major junction — keep 2h+ buffer. If legs are on same train, stay onboard with both PNRs.`,
+        combinedProb: Math.round(p1 * p2 * 100)
+      });
+    }
+
+    setLoaderStep('rl', 4, 'Ranking all routes by confirmation probability…');
+
+    routes.sort((a,b) => b.score - a.score);
+    routes.forEach((r,i) => r.rank = i+1);
+    renderRouteResults(routes.slice(0, 8), from, to, days);
+
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    document.getElementById('route-loader').classList.remove('visible');
+    stopLoaderElapsed('route');
+  }
+}
+
+function expandCity(code) {
+  for (const [city, stations] of Object.entries(CITY_STATIONS)) {
+    if (city.startsWith(code) || code.startsWith(city) || stations.includes(code)) return stations;
+  }
+  return [code];
+}
+
+function renderRouteResults(routes, from, to, days) {
+  days = days || 7;
+  const container = document.getElementById('route-results');
+  if (!routes.length) { container.innerHTML = emptyState('No routes found', 'Try different stations.'); return; }
+
+  const typeLabel = { direct: 'Direct', 'longer-segment': 'Longer Segment → GNWL Upgrade', 'split-2train': 'Split Journey — 2 trains', 'alternate-origin': 'Alternate Origin Station' };
+  const typeColor = { direct: 'var(--text3)', 'longer-segment': 'var(--accent)', 'split-2train': 'var(--blue)', 'alternate-origin': 'var(--purple)' };
+
+  const demoNote = !API_KEY ? `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode — route analysis for ${from} → ${to}</div>` : '';
+  let html = demoNote + `<div class="results-header"><div class="results-count">${routes.length} route options · ranked by confirmation probability</div></div>`;
+
+  const geminiJobs = [];
+
+  routes.forEach((r, i) => {
+    const pct = Math.round(r.score * 100);
+    const scoreColor = probColor(r.score);
+    const isBest = i === 0;
+    const routeCardId = `rc-${i}`;
+    const primaryLeg = r.legs[0];
+    const primaryQt = parseWLType(primaryLeg.status);
+    const primaryWp = parseWLPosition(primaryLeg.status);
+
+    const legsHtml = r.legs.map((leg, li) => {
+      const qt = parseWLType(leg.status);
+      const wp = parseWLPosition(leg.status);
+      const lp = confirmationProbability(qt, wp, days, selectedClass, 'popular');
+      const lpct = Math.round(lp * 100);
+      const lpDisplay = (!qt || leg.status === 'N/A') ? 'N/A' : `${lpct}%`;
+      return `${li > 0 ? `<div style="padding:4px 0 4px 10px;font-family:var(--mono);font-size:10px;color:var(--blue);">↪ Transfer: ${r.interchange || '—'} · Keep 2h+ buffer</div>` : ''}
+        <div class="split-leg">
+          <div class="leg-route">
+            <span class="leg-station">${leg.from}</span><span class="leg-arrow">→</span><span class="leg-station">${leg.to}</span>
+            <span class="leg-train">${leg.train}</span>
+            <span class="leg-timing">${leg.dep || ''}→${leg.arr || ''}</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${quotaBadge(qt || 'GN')}
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;color:${probColor(lp)}">${leg.status}</span>
+            <span style="font-family:var(--mono);font-size:11px;color:${probColor(lp)}">${lpDisplay}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    let insight = '';
+    if (GEMINI_KEY && primaryQt && primaryQt !== 'CNF' && primaryQt !== 'RAC') {
+      insight = geminiSpinner(routeCardId, 'Analyzing…');
+      geminiJobs.push({ cardId: routeCardId, quotaType: primaryQt, wlPosition: primaryWp, daysOut: 7, cls: selectedClass });
+    }
+
+    html += `<div class="route-option ${isBest ? 'best' : ''}" style="animation-delay:${i*60}ms">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">#${r.rank}</span>
+            <span style="font-family:var(--mono);font-size:10px;color:${typeColor[r.type] || 'var(--text3)'};text-transform:uppercase;letter-spacing:.06em;">${typeLabel[r.type] || r.type}</span>
+            ${isBest ? '<span class="badge badge-lime"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle;margin-right:3px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Best option</span>' : ''}
+          </div>
+          ${r.note ? `<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">${r.note}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:500;color:${scoreColor}">${pct}%</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">${r.type === 'split-2train' ? 'combined' : 'confirm'} prob.</div>
+        </div>
+      </div>
+      <div class="split-legs">${legsHtml}</div>
+      <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3);display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${r.totalTime}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3);display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>${r.transfers === 0 ? 'No transfer' : r.transfers+' transfer'}</span>
+        ${r.days ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text3);display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${r.days}</span>` : ''}
+      </div>
+      ${insight}
+    </div>`;
+  });
+
+  container.innerHTML = html;
+
+  // Async Gemini for route cards
+  const seen = new Set();
+  geminiJobs.forEach(job => {
+    const key = `${job.quotaType}_${Math.round((job.wlPosition||0)/5)*5}_${job.cls}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      (async () => {
+        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', `Route: ${from}→${to}`);
+        const el = document.getElementById(job.cardId);
+        if (el) el.outerHTML = renderGeminiAdvice(g) || '';
+      })();
+    } else {
+      setTimeout(async () => {
+        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', null);
+        const el = document.getElementById(job.cardId);
+        if (el) el.outerHTML = renderGeminiAdvice(g) || '';
+      }, 1500);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+//  SPLIT JOURNEY FINDER
+// ═══════════════════════════════════════════
+
+// Helper: fetch real availability for a single leg. Returns normalised status string.
+async function fetchLegAvailability(trainNo, fromStn, toStn, cls, quota, dmy) {
+  if (!API_KEY) return null; // caller will use demo fallback
+  try {
+    const av = await apiCall('/api/v2/checkSeatAvailability', {
+      trainNo, fromStationCode: fromStn, toStationCode: toStn,
+      classType: cls, quota, date: dmy
+    });
+    const parsed = parseV2Response(av, cls, dmy);
+    return parsed.status && parsed.status !== 'N/A' ? parsed.status : 'N/A';
+  } catch { return 'N/A'; }
+}
+
+async function findSplits() {
+  const from = document.getElementById('sp-from').value.trim().toUpperCase();
+  const to = document.getElementById('sp-to').value.trim().toUpperCase();
+  const date = document.getElementById('sp-date').value;
+  if (!from || !to || !date) return;
+
+  const errEl = document.getElementById('split-error');
+  const results = document.getElementById('split-results');
+  errEl.style.display = 'none';
+  results.innerHTML = '';
+  document.getElementById('split-loader').classList.add('visible');
+  startLoaderElapsed('split');
+
+  const days = daysUntil(date);
+  const dmy = date;
+  const cls = selectedSplitClass;
+
+  try {
+    // ─── Step 1: Fetch real direct trains ───
+    setLoaderStep('sl', 1, 'Fetching direct availability…');
+    let directTrainList = [];
+    if (API_KEY) {
+      try {
+        const data = await apiCall('/api/v3/trainBetweenStations', {
+          fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
+        });
+        directTrainList = (data?.data || []).map(t => ({
+          trainNo: t.train_number || t.trainNo,
+          trainName: t.train_name || t.trainName || 'Train',
+          fromStation: t.from_station_code || t.from || from,
+          toStation: t.to_station_code || t.to || to,
+          dep: t.from_std || '--', arr: t.to_std || '--', duration: t.duration || '--'
+        }));
+      } catch { directTrainList = getDemoTrains(from, to); }
+    } else {
+      await sleep(500);
+      directTrainList = getDemoTrains(from, to);
+    }
+
+    const directTrain = directTrainList[0] || null;
+
+    // ─── Step 2: Fetch real availability for ALL direct trains, pick the best ───
+    // (mirrors how searchTrains sorts by probability — don't just blindly use [0])
+    let directStatus = 'N/A';
+    let bestDirectTrain = directTrain;
+    if (API_KEY && directTrainList.length) {
+      // Fetch availability for top 5 trains in parallel
+      const avResults = await Promise.all(
+        directTrainList.slice(0, 5).map(async t => {
+          const boardAt = t.fromStation || from;
+          const alightAt = t.toStation || to;
+          const status = await fetchLegAvailability(t.trainNo, boardAt, alightAt, cls, 'GN', dmy);
+          const prob = confirmationProbability(parseWLType(status), parseWLPosition(status), days, cls, 'popular');
+          return { train: t, status, prob };
+        })
+      );
+      // Sort by probability descending, pick best
+      avResults.sort((a, b) => b.prob - a.prob);
+      bestDirectTrain = avResults[0].train;
+      directStatus = avResults[0].status;
+    } else if (!API_KEY && directTrain) {
+      directStatus = simulateAvailability(99, cls, from, to).status;
+    }
+
+    const hubs = corridorHubs(from, to);
+    const options = [];
+    setLoaderStep('sl', 2, 'Checking longer-segment GNWL options…');
+
+    // ─── Option 1: Longer segment (GNWL upgrade) ───
+    const directQt = parseWLType(directStatus);
+    if (directQt === 'PQWL' || directQt === 'RLWL' || directQt === 'RQWL') {
+      const gnwlPos = Math.max(1, (parseWLPosition(directStatus) || 10) + 6);
+      const termStatus = `GNWL ${gnwlPos}`;
+      const tProb = confirmationProbability('GNWL', gnwlPos, days, cls, 'popular');
+      options.push({
+        type: 'longer-segment',
+        label: 'Book to terminus — GNWL upgrade',
+        legs: [{ from, to: `${to} → terminus`, train: bestDirectTrain ? `${bestDirectTrain.trainNo} ${bestDirectTrain.trainName}` : 'Same train', dep: bestDirectTrain?.dep || '—', arr: '—', status: termStatus, quota: 'GNWL' }],
+        note: `Book ${from}→terminus instead of ${from}→${to}. You get GNWL (origin quota) instead of ${directQt} (intermediate pool). Deboard at ${to} — perfectly fine. Extra cost ₹100–250. Doubles your confirmation odds.`,
+        score: tProb
+      });
+    }
+
+    // ─── Option 2: Same-train two-PNR split ───
+    if (bestDirectTrain && hubs.length) {
+      const hub = hubs[0];
+      const boardAt = bestDirectTrain.fromStation || from;
+      let s1 = 'N/A', s2 = 'N/A';
+      if (API_KEY) {
+        [s1, s2] = await Promise.all([
+          fetchLegAvailability(bestDirectTrain.trainNo, boardAt, hub, cls, 'GN', dmy),
+          fetchLegAvailability(bestDirectTrain.trainNo, hub, bestDirectTrain.toStation || to, cls, 'GN', dmy)
+        ]);
+      } else {
+        s1 = simulateAvailability(11, cls, from, hub).status;
+        s2 = simulateAvailability(22, cls, hub, to).status;
+      }
+      const p1 = confirmationProbability(parseWLType(s1), parseWLPosition(s1), days, cls, 'popular');
+      const p2 = confirmationProbability(parseWLType(s2), parseWLPosition(s2), days, cls, 'popular');
+      options.push({
+        type: 'pnr-split',
+        label: `Same train, two PNRs (via ${STATION_NAMES[hub]||hub})`,
+        legs: [
+          { from: boardAt, to: hub, train: `${bestDirectTrain.trainNo} ${bestDirectTrain.trainName}`, dep: bestDirectTrain.dep, arr: '—', status: s1, quota: parseWLType(s1) || 'GN' },
+          { from: hub, to: bestDirectTrain.toStation || to, train: `${bestDirectTrain.trainNo} ${bestDirectTrain.trainName}`, dep: '—', arr: bestDirectTrain.arr, status: s2, quota: parseWLType(s2) || 'GN' }
+        ],
+        note: `Same train, two separate PNRs split at ${STATION_NAMES[hub]||hub}. Stay onboard — just have both PNR printouts. The ${boardAt}→${hub} segment often gets GNWL (better odds than PQWL for the full route). Risk: if leg 1 fails, source an alternate for just that segment.`,
+        score: p1 * p2
+      });
+    }
+
+    // ─── Option 3: Two different real trains via hubs ───
+    setLoaderStep('sl', 3, 'Finding split trains via interchange hubs…');
+    for (const hub of hubs.slice(0, 2)) {
+      // Fetch real trains for each leg from the API
+      let leg1Trains = [], leg2Trains = [];
+      if (API_KEY) {
+        try {
+          const d1 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: from, toStationCode: hub, dateOfJourney: fmtDate(date) });
+          leg1Trains = (d1?.data || []).map(t => ({
+            trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train',
+            fromStation: t.from_station_code || t.from || from,
+            toStation: t.to_station_code || t.to || hub,
+            dep: t.from_std || '--', arr: t.to_std || '--'
+          }));
+        } catch {}
+        await sleep(150);
+        try {
+          const d2 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: hub, toStationCode: to, dateOfJourney: fmtDate(date) });
+          leg2Trains = (d2?.data || []).map(t => ({
+            trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train',
+            fromStation: t.from_station_code || t.from || hub,
+            toStation: t.to_station_code || t.to || to,
+            dep: t.from_std || '--', arr: t.to_std || '--'
+          }));
+        } catch {}
+      } else {
+        leg1Trains = getDemoTrains(from, hub);
+        leg2Trains = getDemoTrains(hub, to);
+      }
+
+      const leg1T = leg1Trains[0], leg2T = leg2Trains[0];
+      if (!leg1T || !leg2T) continue;
+
+      let s1 = 'N/A', s2 = 'N/A';
+      if (API_KEY) {
+        [s1, s2] = await Promise.all([
+          fetchLegAvailability(leg1T.trainNo, leg1T.fromStation, leg1T.toStation, cls, 'GN', dmy),
+          fetchLegAvailability(leg2T.trainNo, leg2T.fromStation, leg2T.toStation, cls, 'GN', dmy)
+        ]);
+      } else {
+        s1 = simulateAvailability(33, cls, from, hub).status;
+        s2 = simulateAvailability(44, cls, hub, to).status;
+      }
+      await sleep(100);
+
+      const p1 = confirmationProbability(parseWLType(s1), parseWLPosition(s1), days, cls, 'popular');
+      const p2 = confirmationProbability(parseWLType(s2), parseWLPosition(s2), days, cls, 'popular');
+
+      options.push({
+        type: 'two-trains',
+        label: `Two trains via ${STATION_NAMES[hub]||hub} (${hub})`,
+        legs: [
+          { from: leg1T.fromStation, to: leg1T.toStation, train: `${leg1T.trainNo} ${leg1T.trainName}`, dep: leg1T.dep, arr: leg1T.arr, status: s1, quota: parseWLType(s1) || 'GN' },
+          { from: leg2T.fromStation, to: leg2T.toStation, train: `${leg2T.trainNo} ${leg2T.trainName}`, dep: leg2T.dep, arr: leg2T.arr, status: s2, quota: parseWLType(s2) || 'GN' }
+        ],
+        note: `Two entirely different trains. Keep 2h+ buffer at ${STATION_NAMES[hub]||hub}. Fully independent — missing the first train doesn't affect the second booking.`,
+        score: p1 * p2
+      });
+    }
+
+    // ─── Option 4: Tatkal — fetch real TQ availability ───
+    let tatkalStatus = 'N/A';
+    if (bestDirectTrain) {
+      const boardAt = bestDirectTrain.fromStation || from;
+      const alightAt = bestDirectTrain.toStation || to;
+      if (API_KEY) {
+        tatkalStatus = await fetchLegAvailability(bestDirectTrain.trainNo, boardAt, alightAt, cls, 'TQ', dmy);
+      } else {
+        tatkalStatus = simulateTatkalAvail(7, cls).status;
+      }
+    }
+    const tatkalQt = parseWLType(tatkalStatus);
+    const tatkalProb = tatkalQt === 'CNF' ? 1.0 : tatkalQt === 'TQWL' ? confirmationProbability('TQWL', parseWLPosition(tatkalStatus), days, cls, 'popular') : 0.05;
+    options.push({
+      type: 'tatkal',
+      label: 'Tatkal booking (1 day before departure)',
+      legs: [{ from: bestDirectTrain?.fromStation || from, to: bestDirectTrain?.toStation || to, train: bestDirectTrain ? `${bestDirectTrain.trainNo} ${bestDirectTrain.trainName}` : 'Any direct train', dep: bestDirectTrain?.dep || '—', arr: bestDirectTrain?.arr || '—', status: tatkalStatus || 'Opens T-1', quota: 'TQ' }],
+      note: `Tatkal opens 1 day before departure at 10am (AC) / 11am (SL). No waitlist — you either get a confirmed seat or REGRET. Higher fare (~₹300–500 extra for AC). Best used if WL ticket looks unlikely to confirm at T-48h.`,
+      score: tatkalProb
+    });
+
+    options.sort((a,b) => b.score - a.score);
+    renderSplitResults(directStatus, bestDirectTrain, options, from, to, days);
+
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    document.getElementById('split-loader').classList.remove('visible');
+    stopLoaderElapsed('split');
+  }
+}
+
+function renderSplitResults(directStatus, directTrain, options, from, to, days) {
+  const container = document.getElementById('split-results');
+  const dQt = parseWLType(directStatus);
+  const dPos = parseWLPosition(directStatus);
+  const dProb = confirmationProbability(dQt, dPos, days, selectedSplitClass, 'popular');
+  const dPct = dQt ? Math.round(dProb * 100) : null; // null means N/A
+
+  const typeIcons = {
+    'longer-segment': '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>',
+    'pnr-split': '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><polyline points="8 6 18 6 18 16"/><polyline points="16 18 6 18 6 8"/></svg>',
+    'two-trains': '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+    tatkal: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+  };
+  const typeColors = { 'longer-segment': 'var(--accent)', 'pnr-split': 'var(--blue)', 'two-trains': 'var(--teal)', tatkal: 'var(--amber)' };
+
+  const demoNote = !API_KEY ? `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode — split analysis for ${from} → ${to}</div>` : '';
+
+  let geminiAdviceHtml = '';
+  if (GEMINI_KEY && dQt && dQt !== 'CNF') {
+    geminiAdviceHtml = `<div id="split-direct-gemini">${geminiSpinner('split-direct-gemini-inner', 'Gemini analyzing your situation…')}</div>`;
+  } else if (dQt && dQt !== 'CNF') {
+    geminiAdviceHtml = dQt === 'PQWL'
+      ? `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>PQWL:</strong> Shared intermediate quota — low confirmation odds. See alternatives below. Booking to terminal often gives GNWL instead.</span></div>`
+      : dQt === 'RLWL'
+      ? `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>RLWL:</strong> Only clears on same remote-station cancellations. Consider alternatives below immediately.</span></div>`
+      : '';
+  }
+
+  let html = demoNote + `
+    <div class="info-box" style="border-color:${dPct === null ? 'var(--border2)' : dPct > 65 ? 'rgba(64,208,160,.3)' : dPct > 40 ? 'rgba(255,184,64,.3)' : 'rgba(255,80,80,.3)'}">
+      <h3 style="display:flex;align-items:center;gap:10px;justify-content:space-between;">
+        <span>Direct route: ${from} → ${to}</span>
+        <span style="font-family:var(--mono);font-size:24px;font-weight:500;color:${dPct === null ? 'var(--text3)' : probColor(dProb)}">${dPct === null ? 'N/A' : dPct+'%'}</span>
+      </h3>
+      <p style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-bottom:10px;">${directTrain ? directTrain.trainNo + ' ' + directTrain.trainName : 'Direct train'} · ${selectedSplitClass}</p>
+      <div class="confirm-bar-wrap">
+        <div class="confirm-label-small">Confirmation probability</div>
+        <div class="confirm-bar-bg" style="height:6px;"><div class="confirm-bar-fill" style="width:${dPct ?? 0}%;background:${dPct === null ? 'var(--text3)' : probColor(dProb)};height:6px;"></div></div>
+        <div class="confirm-pct" style="color:${dPct === null ? 'var(--text3)' : probColor(dProb)};font-size:13px;">${dPct === null ? 'N/A' : probLabel(dProb)+' '+dPct+'%'}</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+        ${quotaBadge(dQt || 'WL')}
+        <span style="font-family:var(--mono);font-size:12px;color:var(--text2)">${directStatus}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${days} days to departure</span>
+      </div>
+      ${geminiAdviceHtml}
+    </div>
+    <div class="section-head">Better alternatives</div>`;
+
+  options.forEach((opt, i) => {
+    const allProbs = opt.legs.map(leg => confirmationProbability(parseWLType(leg.status), parseWLPosition(leg.status), days, selectedSplitClass, 'popular'));
+    const combinedProbFrac = allProbs.reduce((a,b)=>a*b, 1);
+    const combinedProb = Math.round(combinedProbFrac * 100);
+    // If all legs are N/A, show N/A rather than 0%
+    const allNA = opt.legs.every(leg => leg.status === 'N/A' || !parseWLType(leg.status));
+    const cardId = `sc-${i}`;
+
+    let legsHtml = opt.legs.map((leg, li) => {
+      const qt = parseWLType(leg.status);
+      const wp = parseWLPosition(leg.status);
+      const lp = confirmationProbability(qt, wp, days, selectedSplitClass, 'popular');
+      const lpct = Math.round(lp * 100);
+      const lpDisplay = (!qt || leg.status === 'N/A') ? 'N/A' : `${lpct}%`;
+      return `${li > 0 ? `<div style="padding:4px 0;font-family:var(--mono);font-size:10px;color:var(--blue);">↪ Continues on</div>` : ''}
+        <div class="split-leg">
+          <div class="leg-route">
+            <span class="leg-station">${leg.from}</span><span class="leg-arrow">→</span><span class="leg-station">${leg.to}</span>
+            <span class="leg-train">${leg.train}</span>
+            <span class="leg-timing">${leg.dep||''}→${leg.arr||''}</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            ${quotaBadge(qt || leg.quota || 'GN')}
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;color:${probColor(lp)}">${leg.status}</span>
+            <span style="font-family:var(--mono);font-size:11px;color:${probColor(lp)}">${lpDisplay}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    html += `<div class="split-card" style="animation-delay:${i*80}ms;border-color:${typeColors[opt.type]||'rgba(96,168,240,.2)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:10px;color:${typeColors[opt.type]||'var(--blue)'};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">${typeIcons[opt.type]||'•'} ${opt.label}</div>
+          <div style="font-size:12.5px;color:var(--text2);line-height:1.5;">${opt.note}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:500;color:${allNA ? 'var(--text3)' : probColor(combinedProbFrac)}">${allNA ? 'N/A' : combinedProb+'%'}</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">combined prob.</div>
+        </div>
+      </div>
+      <div class="split-legs">${legsHtml}</div>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+
+  // Async Gemini for direct status
+  if (GEMINI_KEY && dQt && dQt !== 'CNF') {
+    (async () => {
+      const g = await getGeminiAdvice(dQt, dPos, days, selectedSplitClass, 'popular', `Route: ${from}→${to}`);
+      const el = document.getElementById('split-direct-gemini');
+      if (el) el.innerHTML = renderGeminiAdvice(g);
+    })();
+  }
+}
+
+// ═══════════════════════════════════════════
+//  PNR STATUS
+// ═══════════════════════════════════════════
+function demoPNR(pnr) {
+  return {
+    pnrNumber: pnr, trainNo: '12603', trainName: 'HYDERABAD EXPRESS',
+    journeyDate: '25 Apr 2026', boardingStation: 'SC', destinationStation: 'MAS',
+    class: '3A', quota: 'GN', chartStatus: 'CHART NOT PREPARED',
+    passengers: [
+      { name: 'PASSENGER 1', age: 32, gender: 'M', bookingStatus: 'GNWL 18', currentStatus: 'GNWL 12' },
+      { name: 'PASSENGER 2', age: 28, gender: 'F', bookingStatus: 'GNWL 19', currentStatus: 'GNWL 13' }
+    ]
+  };
+}
+
+function normalizePNR(d, pnr) {
+  return {
+    pnrNumber: pnr,
+    trainNo: d.trainNumber || d.train_number,
+    trainName: d.trainName || d.train_name,
+    journeyDate: d.dateOfJourney || d.journey_date,
+    boardingStation: d.boardingStationName || d.boardingStation,
+    destinationStation: d.destinationStationName || d.destinationStation,
+    class: d.classType || d.class,
+    quota: d.quota,
+    chartStatus: d.chartPrepared ? 'CHART PREPARED' : 'CHART NOT PREPARED',
+    passengers: (d.passengerList || d.passengers || []).map(p => ({
+      name: p.passengerName || p.name || 'Passenger',
+      age: p.passengerAge || p.age,
+      gender: p.passengerGender || p.gender,
+      bookingStatus: p.bookingStatus || p.booking_status,
+      currentStatus: p.currentStatus || p.current_status
+    }))
+  };
+}
+
+async function checkPNR() {
+  const pnr = document.getElementById('pnr-input').value.trim();
+  if (!pnr || pnr.length < 10) {
+    document.getElementById('pnr-error').textContent = 'Enter a valid 10-digit PNR.';
+    document.getElementById('pnr-error').style.display = 'block'; return;
+  }
+
+  const loader = document.getElementById('pnr-loader');
+  const errEl = document.getElementById('pnr-error');
+  const result = document.getElementById('pnr-result');
+  loader.classList.add('visible');
+  setLoaderStep('pl', 1, 'Fetching PNR status from IRCTC…');
+  startLoaderElapsed('pnr');
+  errEl.style.display = 'none';
+  result.innerHTML = '';
+
+  try {
+    let pnrData;
+    if (!API_KEY) {
+      await sleep(300);
+      setLoaderStep('pl', 2, 'Parsing passenger & booking details…');
+      await sleep(300);
+      setLoaderStep('pl', 3, 'Computing confirmation probability…');
+      await sleep(200);
+      pnrData = demoPNR(pnr);
+    } else {
+      const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: pnr });
+      if (!data?.data) throw new Error('PNR not found or invalid response.');
+      setLoaderStep('pl', 2, 'Parsing passenger & booking details…');
+      await sleep(200);
+      setLoaderStep('pl', 3, 'Computing confirmation probability…');
+      await sleep(150);
+      pnrData = normalizePNR(data.data, pnr);
+    }
+    lastPNRResult = pnrData;
+    await renderPNRResult(pnrData, result);
+    if (!API_KEY) result.insertAdjacentHTML('afterbegin', `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode — showing example PNR data</div>`);
+  } catch(e) {
+    if (e.message === 'NO_KEY') {
+      const pd = demoPNR(pnr);
+      lastPNRResult = pd;
+      await renderPNRResult(pd, result);
+      result.insertAdjacentHTML('afterbegin', `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode</div>`);
+    } else {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.style.display = 'block';
+    }
+  } finally {
+    loader.classList.remove('visible');
+    stopLoaderElapsed('pnr');
+  }
+}
+
+async function renderPNRResult(d, container) {
+  if (!container) container = document.getElementById('pnr-result');
+  const today = new Date();
+  const jDate = d.journeyDate ? new Date(d.journeyDate) : new Date(today.getTime() + 7*86400000);
+  const days = Math.max(0, Math.round((jDate - today) / 86400000));
+
+  const firstPax = d.passengers?.[0];
+  const firstQT = firstPax ? parseWLType(firstPax.currentStatus) : null;
+  const firstWP = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
+  const overallProb = confirmationProbability(firstQT, firstWP, days, d.class, 'popular');
+  const overallPct = Math.round(overallProb * 100);
+
+  const paxHTML = (d.passengers || []).map(p => {
+    const qt = parseWLType(p.currentStatus);
+    const wp = parseWLPosition(p.currentStatus);
+    const bPos = parseWLPosition(p.bookingStatus);
+    const cPos = parseWLPosition(p.currentStatus);
+    const movement = (bPos !== null && cPos !== null) ? bPos - cPos : null;
+    const prob = confirmationProbability(qt, wp, days, d.class, 'popular');
+    const pct = Math.round(prob * 100);
+    return `<div class="pnr-pax-row">
+      <div>
+        <span style="font-weight:500;font-size:13.5px;">${p.name || 'Passenger'}</span>
+        <span style="font-size:12px;color:var(--text3);margin-left:6px;">${p.age ? '('+p.age+')' : ''} ${p.gender || ''}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3)">Booked: <span style="color:var(--text2)">${p.bookingStatus || '—'}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${quotaBadge(qt || 'WL')}
+          <span style="font-family:var(--mono);font-size:12px;font-weight:500;color:${probColor(prob)}">${p.currentStatus || '—'}</span>
+          ${movement !== null ? `<span style="font-family:var(--mono);font-size:11px;color:${movement > 0 ? 'var(--teal)' : movement < 0 ? 'var(--red)' : 'var(--text3)'}">
+            ${movement > 0 ? '↑' : movement < 0 ? '↓' : '—'}${Math.abs(movement)} pos</span>` : ''}
+        </div>
+        <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${probColor(prob)}">${pct}%</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Static advice
+  let staticAdvice = '';
+  if (firstQT === 'CNF') {
+    staticAdvice = `<div class="insight-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="insight-text"><strong>Confirmed!</strong> Berth numbers assigned at chart preparation (~4h before departure). Screenshot your PNR before travel.</span></div>`;
+  } else if (firstQT === 'RAC') {
+    staticAdvice = `<div class="insight-strip"><span class="insight-icon">≈</span><span class="insight-text"><strong>RAC — travel guaranteed.</strong> You'll have a shared berth. Almost always upgrades to a full berth after chart prep.</span></div>`;
+  } else if (firstQT === 'RLWL' && (firstWP || 0) > 5) {
+    staticAdvice = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>Action needed:</strong> RLWL ${firstWP} is unlikely to confirm. RLWL only clears on same remote-station cancellations — very rare. Book alternative now. Cancel this before chart prep for a full refund.</span></div>`;
+  } else if (firstQT === 'PQWL') {
+    staticAdvice = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>PQWL risk:</strong> Shared intermediate quota — slow to clear. Check Split Journey finder to see if a longer-segment booking gives GNWL instead.</span></div>`;
+  } else if (firstQT === 'GNWL' && (firstWP || 0) <= 15) {
+    staticAdvice = `<div class="insight-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="insight-text"><strong>Good odds:</strong> GNWL ${firstWP} at ${days} days out. Major movement at T-72h and T-24h. Monitor at those windows.</span></div>`;
+  }
+
+  const geminiPlaceholder = GEMINI_KEY && firstQT && firstQT !== 'CNF'
+    ? `<div id="pnr-gemini-advice">${geminiSpinner('pnr-gemini-inner', 'Gemini is reading your booking…')}</div>`
+    : '';
+
+  container.innerHTML = `<div class="pnr-card">
+    <div class="pnr-top-row">
+      <div>
+        <div class="pnr-number">${d.pnrNumber}</div>
+        <div class="pnr-meta">${d.trainNo || ''} · ${d.trainName || ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--mono);font-size:32px;font-weight:500;color:${probColor(overallProb)}">${overallPct}%</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">confirm probability</div>
+        <div style="margin-top:4px;font-family:var(--mono);font-size:10px;color:var(--text3);display:flex;align-items:center;gap:3px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>statistical model</div>
+      </div>
+    </div>
+    <div class="pnr-grid">
+      <div class="pnr-field"><div class="pnr-field-label">Journey Date</div><div class="pnr-field-value">${d.journeyDate || '—'}</div></div>
+      <div class="pnr-field"><div class="pnr-field-label">Chart Status</div><div class="pnr-field-value" style="font-size:12px;color:var(--text2)">${d.chartStatus || '—'}</div></div>
+      <div class="pnr-field"><div class="pnr-field-label">Route</div><div class="pnr-field-value">${d.boardingStation || '?'} → ${d.destinationStation || '?'}</div></div>
+      <div class="pnr-field"><div class="pnr-field-label">Class · Quota</div><div class="pnr-field-value">${d.class || '—'} · ${d.quota || '—'}</div></div>
+    </div>
+    <div class="confirm-bar-wrap" style="margin-bottom:16px;">
+      <div class="confirm-label-small">Overall confirmation probability</div>
+      <div class="confirm-bar-bg" style="height:6px;"><div class="confirm-bar-fill" style="width:${overallPct}%;background:${probColor(overallProb)};height:6px;"></div></div>
+      <div class="confirm-pct" style="color:${probColor(overallProb)};font-size:13px;">${overallPct}%</div>
+    </div>
+    <div class="pnr-passengers">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Passengers — Booked → Current → Probability</div>
+      ${paxHTML || '<div style="color:var(--text3);font-size:13px;">No passenger data</div>'}
+    </div>
+    <div style="margin-top:14px;">
+      ${staticAdvice}
+      ${geminiPlaceholder}
+    </div>
+  </div>`;
+
+  // Async Gemini
+  if (GEMINI_KEY && firstQT && firstQT !== 'CNF') {
+    (async () => {
+      const g = await getGeminiAdvice(firstQT, firstWP, days, d.class, 'popular', `Train: ${d.trainName || ''}`);
+      const el = document.getElementById('pnr-gemini-advice');
+      if (el) el.innerHTML = renderGeminiAdvice(g);
+    })();
+  }
+}
+
+// ═══════════════════════════════════════════
+//  WATCHLIST
+// ═══════════════════════════════════════════
+function addToWatchlist() {
+  const pnr = document.getElementById('pnr-input').value.trim();
+  if (!pnr || pnr.length < 10) return;
+  if (watchlist.find(w => w.pnr === pnr)) { alert('PNR already in watchlist.'); return; }
+  watchlist.push({ pnr, addedAt: new Date().toISOString(), lastChecked: new Date().toISOString(), data: lastPNRResult });
+  saveWatchlist(); updateWatchCount(); renderWatchlist();
+  alert(`PNR ${pnr} added to watchlist.`);
+}
+
+function removeFromWatchlist(pnr) {
+  watchlist = watchlist.filter(w => w.pnr !== pnr);
+  saveWatchlist(); updateWatchCount(); renderWatchlist();
+}
+
+function clearWatchlist() { if (!confirm('Clear all PNRs?')) return; watchlist = []; saveWatchlist(); updateWatchCount(); renderWatchlist(); }
+function saveWatchlist() { localStorage.setItem('railradar_watchlist', JSON.stringify(watchlist)); }
+function updateWatchCount() { document.getElementById('watch-count').textContent = watchlist.length; }
+
+async function refreshWatchlistAll() {
+  for (const entry of watchlist) {
+    if (API_KEY) {
+      try {
+        const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: entry.pnr });
+        if (data?.data) { entry.data = normalizePNR(data.data, entry.pnr); }
+      } catch {}
+    }
+    entry.lastChecked = new Date().toISOString();
+    await sleep(300);
+  }
+  saveWatchlist(); renderWatchlist();
+}
+
+function renderWatchlist() {
+  const container = document.getElementById('watchlist-content');
+  if (!container) return;
+  if (!watchlist.length) {
+    container.innerHTML = emptyState('No PNRs tracked', 'Check a PNR and click "+ Watchlist" to start tracking.');
+    return;
+  }
+
+  let html = '';
+  watchlist.forEach(entry => {
+    const d = entry.data;
+    const today = new Date();
+    const jDate = d?.journeyDate ? new Date(d.journeyDate) : new Date(today.getTime() + 7*86400000);
+    const days = Math.max(0, Math.round((jDate - today) / 86400000));
+    const firstPax = d?.passengers?.[0];
+    const qt = firstPax ? parseWLType(firstPax.currentStatus) : null;
+    const wp = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
+    const prob = confirmationProbability(qt, wp, days, d?.class || 'SL', 'popular');
+    const pct = Math.round(prob * 100);
+    const lastCheck = new Date(entry.lastChecked);
+    const minAgo = Math.round((new Date() - lastCheck) / 60000);
+
+    html += `<div class="watch-item">
+      <span class="watch-pnr">${entry.pnr}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;color:var(--text2);">${d?.boardingStation || '?'} → ${d?.destinationStation || '?'}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);">${d?.trainName || '—'} · ${d?.class || '—'}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Checked ${minAgo < 60 ? minAgo+'m ago' : Math.round(minAgo/60)+'h ago'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${quotaBadge(qt || '—')}
+        <span style="font-family:var(--mono);font-size:12px;font-weight:500;color:${probColor(prob)}">${firstPax?.currentStatus || '—'}</span>
+      </div>
+      <div style="font-family:var(--mono);font-size:20px;font-weight:500;color:${probColor(prob)};min-width:50px;text-align:right;">${pct}%</div>
+      <button onclick="removeFromWatchlist('${entry.pnr}')" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;transition:color .15s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">×</button>
+    </div>`;
+  });
+
+  html += `<div class="info-box" style="margin-top:16px;">
+    <h3>Auto-refresh</h3>
+    <p>Click "Refresh All" to fetch the latest PNR status for all tracked PNRs. With a RapidAPI key, this hits the live IRCTC API. Check at T-72h and T-24h for the best signal on WL movement.</p>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+//  WL TRACKER
+// ═══════════════════════════════════════════
+function addToTracker() {
+  const pnr = document.getElementById('pnr-input').value.trim();
+  if (!pnr || pnr.length < 10) return;
+  addTrackerPNRByValue(pnr);
+}
+
+function addTrackerPNR() {
+  const pnr = document.getElementById('tracker-pnr-input').value.trim();
+  if (!pnr || pnr.length < 10) return;
+  addTrackerPNRByValue(pnr);
+  document.getElementById('tracker-pnr-input').value = '';
+}
+
+function addTrackerPNRByValue(pnr) {
+  if (trackerData.find(t => t.pnr === pnr)) { alert('PNR already being tracked.'); return; }
+  const now = Date.now();
+  const initData = lastPNRResult?.pnrNumber === pnr ? lastPNRResult : null;
+  const initPax = initData?.passengers?.[0];
+  const initPos = initPax ? parseWLPosition(initPax.currentStatus) : null;
+  trackerData.push({
+    pnr, addedAt: now,
+    trainName: initData?.trainName || null,
+    cls: initData?.class || 'SL',
+    journeyDate: initData?.journeyDate || null,
+    history: initPos !== null ? [{ ts: now, pos: initPos, status: initPax?.currentStatus }] : []
+  });
+  saveTracker(); renderTracker();
+}
+
+function clearTracker() { if (!confirm('Clear all tracked PNRs?')) return; trackerData = []; saveTracker(); renderTracker(); }
+function saveTracker() { localStorage.setItem('railradar_tracker', JSON.stringify(trackerData)); }
+
+async function refreshTracker() {
+  for (const entry of trackerData) {
+    if (API_KEY) {
+      try {
+        const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: entry.pnr });
+        if (data?.data) {
+          const pnrData = normalizePNR(data.data, entry.pnr);
+          const firstPax = pnrData.passengers?.[0];
+          const pos = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
+          if (pos !== null) {
+            entry.history.push({ ts: Date.now(), pos, status: firstPax.currentStatus });
+            entry.history = entry.history.slice(-50); // keep last 50 points
+          }
+          entry.trainName = pnrData.trainName;
+          entry.cls = pnrData.class;
+          entry.journeyDate = pnrData.journeyDate;
+        }
+      } catch {}
+    } else {
+      // Demo: simulate some movement
+      const last = entry.history[entry.history.length - 1];
+      if (last && last.pos > 1) {
+        const drop = Math.random() > 0.5 ? Math.floor(Math.random() * 3) : 0;
+        const newPos = Math.max(1, last.pos - drop);
+        entry.history.push({ ts: Date.now(), pos: newPos, status: `GNWL ${newPos}` });
+      } else if (!entry.history.length) {
+        const pos = Math.floor(Math.random() * 30) + 5;
+        entry.history.push({ ts: Date.now(), pos, status: `GNWL ${pos}` });
+      }
+    }
+    await sleep(200);
+  }
+  saveTracker(); renderTracker();
+}
+
+function renderTracker() {
+  const container = document.getElementById('tracker-content');
+  if (!container) return;
+  if (!trackerData.length) {
+    container.innerHTML = emptyState('No PNRs tracked', 'Add a PNR above to start tracking WL movement over time.');
+    return;
+  }
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${trackerData.length} PNR${trackerData.length>1?'s':''} tracked</span>
+    <button class="btn-secondary" onclick="refreshTracker()" style="height:34px;font-size:11px;">↻ Refresh All</button>
+  </div>`;
+
+  trackerData.forEach(entry => {
+    const history = entry.history;
+    const latest = history[history.length - 1];
+    const earliest = history[0];
+    const totalDrop = earliest && latest ? earliest.pos - latest.pos : 0;
+    const hoursSince = earliest ? (Date.now() - earliest.ts) / 3600000 : 0;
+    const ratePerHour = hoursSince > 0 ? totalDrop / hoursSince : 0;
+    const today = new Date();
+    const jDate = entry.journeyDate ? new Date(entry.journeyDate) : new Date(today.getTime() + 7*86400000);
+    const days = Math.max(0, Math.round((jDate - today) / 86400000));
+    const qt = latest ? parseWLType(latest.status) : null;
+    const prob = latest ? confirmationProbability(qt, parseWLPosition(latest.status), days, entry.cls || 'SL', 'popular') : 0;
+    const pct = Math.round(prob * 100);
+
+    // Build SVG mini-chart
+    let chartHtml = '<div style="color:var(--text3);font-size:11px;padding:8px;font-family:var(--mono);">No data yet — click Refresh</div>';
+    if (history.length >= 2) {
+      const maxPos = Math.max(...history.map(h => h.pos)) + 2;
+      const minPos = Math.max(0, Math.min(...history.map(h => h.pos)) - 2);
+      const W = 400, H = 60;
+      const points = history.map((h, i) => {
+        const x = (i / (history.length - 1)) * W;
+        const y = H - ((h.pos - minPos) / (maxPos - minPos)) * H;
+        return `${x},${y}`;
+      }).join(' ');
+      chartHtml = `<div class="movement-chart">
+        <svg class="movement-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <polyline points="${points}" fill="none" stroke="${probColor(prob)}" stroke-width="2" stroke-linejoin="round"/>
+          ${history.map((h, i) => {
+            const x = (i / (history.length - 1)) * W;
+            const y = H - ((h.pos - minPos) / (maxPos - minPos)) * H;
+            return `<circle cx="${x}" cy="${y}" r="3" fill="${probColor(prob)}"/>`;
+          }).join('')}
+        </svg>
+      </div>`;
+    }
+
+    html += `<div class="tracker-card">
+      <div class="tracker-header">
+        <div>
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--text)">${entry.pnr}</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:3px;">${entry.trainName || 'Train unknown'} · ${entry.cls || 'SL'} · ${entry.journeyDate || '—'}</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="text-align:right;">
+            <div style="font-family:var(--mono);font-size:20px;font-weight:500;color:${probColor(prob)}">${pct}%</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">conf. prob.</div>
+          </div>
+          <button onclick="removeTrackerPNR('${entry.pnr}')" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">×</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:2px">Current</div>
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${probColor(prob)}">${latest?.status || 'Unknown'}</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:2px">Total movement</div>
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${totalDrop > 0 ? 'var(--teal)' : totalDrop < 0 ? 'var(--red)' : 'var(--text3)'}">${totalDrop > 0 ? '↑ +' : totalDrop < 0 ? '↓ ' : '—'}${Math.abs(totalDrop)} positions</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:2px">Movement rate</div>
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--text2)">${ratePerHour.toFixed(2)}/hr</div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:2px">Data points</div>
+          <div style="font-family:var(--mono);font-size:14px;color:var(--text2)">${history.length}</div>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">WL Position over time (lower = better)</div>
+      ${chartHtml}
+      ${ratePerHour > 0.3 && days > 0 ? `<div class="insight-strip" style="margin-top:8px;"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span><span class="insight-text">Moving at ${ratePerHour.toFixed(2)} positions/hour — good pace. If this holds, expect significant improvement by T-24h.</span></div>` : ''}
+      ${ratePerHour === 0 && history.length > 2 && qt === 'PQWL' ? `<div class="warn-strip" style="margin-top:8px;"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="warn-text">No movement detected on PQWL. Consider booking an alternative before chart preparation.</span></div>` : ''}
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function removeTrackerPNR(pnr) {
+  trackerData = trackerData.filter(t => t.pnr !== pnr);
+  saveTracker(); renderTracker();
+}
+
+// ═══════════════════════════════════════════
+//  CONFIRMATION PREDICTOR
+// ═══════════════════════════════════════════
+function runPredictor() {
+  const quota = document.getElementById('pred-quota').value;
+  const pos = parseInt(document.getElementById('pred-pos').value) || 15;
+  const days = parseInt(document.getElementById('pred-days').value) || 7;
+  const cls = document.getElementById('pred-class').value;
+  const route = document.getElementById('pred-route').value;
+
+  const prob = confirmationProbability(quota, pos, days, cls, route);
+  const pct = Math.round(prob * 100);
+
+  // Timeline projections
+  const projections = [
+    { label: 'Now', d: days },
+    { label: 'T-30d', d: Math.max(0, days - (days-30 > 0 ? days-30 : 0)) },
+    { label: 'T-7d', d: 7 },
+    { label: 'T-3d', d: 3 },
+    { label: 'T-1d', d: 1 },
+    { label: 'Chart', d: 0 },
+  ].filter(p => p.d <= days).map(p => ({ ...p, prob: confirmationProbability(quota, pos, p.d, cls, route) }));
+
+  const resultEl = document.getElementById('pred-result');
+  resultEl.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--mono);font-size:48px;font-weight:500;color:${probColor(prob)};line-height:1;">${pct}%</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:4px;">statistical model estimate · <span style="color:var(--text3);">not IRCTC live data</span></div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        ${quotaBadge(quota)}
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">WL ${pos} · ${days}d out · ${cls}</span>
+      </div>
+    </div>
+    <div class="confirm-bar-wrap" style="margin-bottom:20px;">
+      <div class="confirm-label-small">Probability</div>
+      <div class="confirm-bar-bg" style="height:8px;"><div class="confirm-bar-fill" style="width:${pct}%;background:${probColor(prob)};height:8px;"></div></div>
+      <div class="confirm-pct" style="color:${probColor(prob)};font-size:13px;">${pct}%</div>
+    </div>
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">How probability changes closer to departure</div>
+      ${projections.map(p => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);width:55px;">${p.label}</div>
+          <div style="flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${Math.round(p.prob*100)}%;background:${probColor(p.prob)};border-radius:3px;transition:width .4s;"></div>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:${probColor(p.prob)};width:38px;text-align:right;">${Math.round(p.prob*100)}%</div>
+        </div>`).join('')}
+    </div>
+    <div style="background:var(--bg3);border-radius:8px;padding:12px 14px;font-size:12.5px;color:var(--text2);">
+      <strong style="color:var(--text);">Assessment: </strong>
+      ${pct >= 75 ? 'Strong odds. Hold the ticket and monitor at T-72h and T-24h.' :
+        pct >= 50 ? 'Moderate chance. Have a backup option ready. Check at T-72h.' :
+        pct >= 30 ? 'Below average. Monitor WL closely. If no movement by T-48h, book alternative.' :
+        'Low probability. Book an alternative now. Cancel this before chart prep for full refund.'}
+    </div>
+    ${GEMINI_KEY ? `<div id="pred-gemini">${geminiSpinner('pred-gemini-inner', 'Gemini analyzing your quota situation…')}</div>` : ''}
+  `;
+
+  // Comparison table
+  const comparisons = ['GNWL','RAC','PQWL','RLWL','TQWL','RQWL'].map(q => ({
+    q, prob: confirmationProbability(q, pos, days, cls, route)
+  }));
+  document.getElementById('pred-comparison').innerHTML = `
+    <table class="quota-tbl">
+      <thead><tr><th>Quota</th><th>Description</th><th>Probability at WL ${pos}, ${days}d</th><th></th></tr></thead>
+      <tbody>${comparisons.map(c => `<tr style="${c.q === quota ? 'background:rgba(200,240,96,0.04);' : ''}">
+        <td>${quotaBadge(c.q)}</td>
+        <td style="color:var(--text2)">${{GNWL:'General Waitlist',RAC:'Reservation Against Cancellation',PQWL:'Pooled Quota',RLWL:'Remote Location',TQWL:'Tatkal Waitlist',RQWL:'Request Waitlist'}[c.q]||c.q}</td>
+        <td style="color:${probColor(c.prob)};font-family:var(--mono);font-weight:500">${Math.round(c.prob*100)}%</td>
+        <td style="min-width:100px"><div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:${Math.round(c.prob*100)}%;background:${probColor(c.prob)};border-radius:2px"></div></div></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+
+  // Gemini async
+  if (GEMINI_KEY) {
+    (async () => {
+      const g = await getGeminiAdvice(quota, pos, days, cls, route, null);
+      const el = document.getElementById('pred-gemini');
+      if (el) el.innerHTML = renderGeminiAdvice(g);
+    })();
+  }
+}
+
+// ═══════════════════════════════════════════
+//  LOADER HELPERS
+// ═══════════════════════════════════════════
+
+const _loaderTimers = {};
+const _loaderStarts = {};
+
+function startLoaderElapsed(name) {
+  stopLoaderElapsed(name);
+  _loaderStarts[name] = Date.now();
+  _loaderTimers[name] = setInterval(() => {
+    const el = document.getElementById(name + '-loader-elapsed');
+    if (el) el.textContent = ((Date.now() - _loaderStarts[name]) / 1000).toFixed(1) + 's';
+  }, 100);
+}
+
+function stopLoaderElapsed(name) {
+  clearInterval(_loaderTimers[name]);
+  delete _loaderTimers[name];
+}
+// cfg: { loaderId, steps: [{id, msgId?}], barId, msgId, elapsedId, tagsId?, tags? }
+function createLoaderController(cfg) {
+  let _start = null, _interval = null, _stepTimers = [];
+  const stepDurs = [900, 800, 700, 600]; // fallback durations per step
+
+  function setStep(idx, state) {
+    const el = document.getElementById(cfg.steps[idx].id);
+    if (!el) return;
+    el.className = 'loader-step ' + state;
+  }
+  function setStepTime(idx, ms) {
+    const tid = cfg.steps[idx].id + '-t';
+    const el = document.getElementById(tid);
+    if (el) el.textContent = (ms / 1000).toFixed(1) + 's';
+  }
+  function setBar(pct) {
+    const el = document.getElementById(cfg.barId);
+    if (el) el.style.width = pct + '%';
+  }
+  function setMsg(txt) {
+    const el = document.getElementById(cfg.msgId);
+    if (el) el.textContent = txt;
+  }
+  function setElapsed(txt) {
+    const el = document.getElementById(cfg.elapsedId);
+    if (el) el.textContent = txt;
+  }
+
+  function start() {
+    _start = Date.now();
+    // reset all steps
+    cfg.steps.forEach((s, i) => { setStep(i, i === 0 ? 'active' : ''); });
+    setBar(0);
+    setMsg('Initialising…');
+    // populate tags if any
+    if (cfg.tagsId && cfg.tags) {
+      const el = document.getElementById(cfg.tagsId);
+      if (el) el.innerHTML = cfg.tags.map(t =>
+        `<span class="loader-tag">${t}</span>`
+      ).join('');
+    }
+    _interval = setInterval(() => {
+      if (_start) setElapsed(((Date.now() - _start) / 1000).toFixed(1) + 's');
+    }, 100);
+    // Animate bar growing incrementally while loading
+    const barStops = [15, 38, 62, 85, 96];
+    barStops.forEach((pct, i) => {
+      _stepTimers.push(setTimeout(() => setBar(pct), stepDurs.slice(0,i+1).reduce((a,b)=>a+b,0)));
+    });
+  }
+
+  function advanceStep(idx, label) {
+    if (idx > 0) {
+      setStep(idx - 1, 'done');
+      setStepTime(idx - 1, Date.now() - _start);
+    }
+    if (idx < cfg.steps.length) {
+      setStep(idx, 'active');
+      setMsg((label || cfg.steps[idx].label || '') + '…');
+    }
+  }
+
+  function finish() {
+    cfg.steps.forEach((s, i) => setStep(i, 'done'));
+    setBar(100);
+    setMsg('Done');
+    clearInterval(_interval);
+  }
+
+  function hide() {
+    finish();
+    clearInterval(_interval);
+    _stepTimers.forEach(clearTimeout);
+    const el = document.getElementById(cfg.loaderId);
+    if (el) el.classList.remove('visible');
+  }
+
+  return { start, advanceStep, finish, hide };
+}
+
+// Pre-built controllers for each panel
+const searchLoaderCtrl = createLoaderController({
+  loaderId: 'search-loader',
+  steps: [{id:'ls-1'},{id:'ls-2'},{id:'ls-3'},{id:'ls-4'}],
+  barId: 'search-loader-bar', msgId: 'search-loader-msg', elapsedId: 'search-loader-elapsed',
+  tagsId: 'search-loader-tags',
+});
+const routeLoaderCtrl = createLoaderController({
+  loaderId: 'route-loader',
+  steps: [{id:'rl-1'},{id:'rl-2'},{id:'rl-3'},{id:'rl-4'}],
+  barId: 'route-loader-bar', msgId: 'route-loader-msg', elapsedId: 'route-loader-elapsed',
+});
+const splitLoaderCtrl = createLoaderController({
+  loaderId: 'split-loader',
+  steps: [{id:'sl-1'},{id:'sl-2'},{id:'sl-3'}],
+  barId: 'split-loader-bar', msgId: 'split-loader-msg', elapsedId: 'split-loader-elapsed',
+});
+const pnrLoaderCtrl = createLoaderController({
+  loaderId: 'pnr-loader',
+  steps: [{id:'pl-1'},{id:'pl-2'},{id:'pl-3'}],
+  barId: 'pnr-loader-bar', msgId: 'pnr-loader-msg', elapsedId: 'pnr-loader-elapsed',
+});
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Set default date to 7 days from now
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  const iso = d.toISOString().split('T')[0];
+  ['s-date','r-date','sp-date'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = iso; el.min = new Date().toISOString().split('T')[0]; }
+  });
+
+  // Show API status from env config
+  const apiInd = document.getElementById('api-indicator');
+  if (API_KEY) {
+    apiInd.textContent = '● Live — IRCTC data active';
+    apiInd.style.color = 'var(--teal)';
+  } else {
+    apiInd.textContent = '● Demo mode — no key configured';
+    apiInd.style.color = 'var(--text3)';
+  }
+  const gemInd = document.getElementById('gemini-indicator');
+  if (GEMINI_KEY) {
+    gemInd.textContent = '● Active — AI advisor on';
+    gemInd.style.color = 'var(--purple)';
+  } else {
+    gemInd.textContent = '● Offline — static advice only';
+    gemInd.style.color = 'var(--text3)';
+  }
+
+  // Init
+  renderWatchlist();
+  updateWatchCount();
+  renderTracker();
+  runPredictor();
+
+  // Pre-fill example stations for Hyderabad user
+  document.getElementById('s-from').value = 'SC';
+  document.getElementById('s-to').value = 'MAS';
+  document.getElementById('r-from').value = 'SC';
+  document.getElementById('r-to').value = 'MAS';
+  document.getElementById('sp-from').value = 'SC';
+  document.getElementById('sp-to').value = 'KPD';
+});
+</script>
+</body>
+</html>
