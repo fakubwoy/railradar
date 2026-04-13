@@ -1238,6 +1238,19 @@ function simulatePremTatkalAvail(seed, cls) {
 // ═══════════════════════════════════════════
 //  PROBABILITY MODEL
 // ═══════════════════════════════════════════
+// Parse IRCTC prediction string e.g. "63% Chance" → 0.63
+function parseApiPrediction(predStr) {
+  if (!predStr) return null;
+  const m = String(predStr).match(/(\d+)/);
+  return m ? parseInt(m[1], 10) / 100 : null;
+}
+
+// Use IRCTC API prediction if available, else fall back to statistical model
+function bestProb(apiPrediction, qt, wp, days, cls) {
+  const p = parseApiPrediction(apiPrediction);
+  return p !== null ? p : confirmationProbability(qt, wp, days, cls, 'popular');
+}
+
 function confirmationProbability(quotaType, wlPosition, daysOut, cls, routeType) {
   if (!quotaType) return 0;   // N/A — no data, don't show as 100%
   if (quotaType === 'CNF') return 1.0;
@@ -2502,21 +2515,31 @@ function demoPNR(pnr) {
 
 function normalizePNR(d, pnr) {
   return {
-    pnrNumber: pnr,
-    trainNo: d.trainNumber || d.train_number,
-    trainName: d.trainName || d.train_name,
-    journeyDate: d.dateOfJourney || d.journey_date,
-    boardingStation: d.boardingStationName || d.boardingStation,
-    destinationStation: d.destinationStationName || d.destinationStation,
-    class: d.classType || d.class,
-    quota: d.quota,
-    chartStatus: d.chartPrepared ? 'CHART PREPARED' : 'CHART NOT PREPARED',
-    passengers: (d.passengerList || d.passengers || []).map(p => ({
-      name: p.passengerName || p.name || 'Passenger',
+    pnrNumber: d.Pnr || pnr,
+    trainNo: d.TrainNo || d.trainNumber || d.train_number,
+    trainName: d.TrainName || d.trainName || d.train_name,
+    journeyDate: d.Doj || d.dateOfJourney || d.journey_date,
+    boardingStation: d.BoardingStationName || d.boardingStationName || d.boardingStation,
+    destinationStation: d.ReservationUptoName || d.destinationStationName || d.destinationStation,
+    fromCode: d.From || d.BoardingPoint,
+    toCode: d.To || d.ReservationUpto,
+    class: d.Class || d.classType || d.class,
+    quota: d.Quota || d.quota,
+    chartStatus: (d.ChartPrepared === true || d.chartPrepared === true) ? 'CHART PREPARED' : 'CHART NOT PREPARED',
+    departureTime: d.DepartureTime,
+    arrivalTime: d.ArrivalTime,
+    duration: d.Duration,
+    fare: d.TicketFare || d.BookingFare,
+    trainCancelled: d.TrainCancelledFlag || false,
+    passengers: (d.PassengerStatus || d.passengerList || d.passengers || []).map((p, i) => ({
+      name: p.passengerName || p.name || `Passenger ${p.Number || i + 1}`,
       age: p.passengerAge || p.age,
       gender: p.passengerGender || p.gender,
-      bookingStatus: p.bookingStatus || p.booking_status,
-      currentStatus: p.currentStatus || p.current_status
+      bookingStatus: p.BookingStatus || p.bookingStatus || p.booking_status,
+      currentStatus: p.CurrentStatus || p.currentStatus || p.current_status,
+      coach: p.Coach || p.coach || '',
+      berth: p.Berth || p.berth || '',
+      prediction: p.Prediction || null,
     }))
   };
 }
@@ -2583,7 +2606,8 @@ async function renderPNRResult(d, container) {
   const firstPax = d.passengers?.[0];
   const firstQT = firstPax ? parseWLType(firstPax.currentStatus) : null;
   const firstWP = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
-  const overallProb = confirmationProbability(firstQT, firstWP, days, d.class, 'popular');
+  const firstApiPred = firstPax?.prediction || null;
+  const overallProb = bestProb(firstApiPred, firstQT, firstWP, days, d.class);
   const overallPct = Math.round(overallProb * 100);
 
   const paxHTML = (d.passengers || []).map(p => {
@@ -2592,12 +2616,15 @@ async function renderPNRResult(d, container) {
     const bPos = parseWLPosition(p.bookingStatus);
     const cPos = parseWLPosition(p.currentStatus);
     const movement = (bPos !== null && cPos !== null) ? bPos - cPos : null;
-    const prob = confirmationProbability(qt, wp, days, d.class, 'popular');
+    const apiPrediction = p.prediction || null;
+    const prob = bestProb(apiPrediction, qt, wp, days, d.class);
     const pct = Math.round(prob * 100);
+    const coachBerth = (p.coach && p.berth) ? `${p.coach}-${p.berth}` : (p.coach || (p.berth ? `Berth ${p.berth}` : ''));
     return `<div class="pnr-pax-row">
       <div>
         <span style="font-weight:500;font-size:13.5px;">${p.name || 'Passenger'}</span>
         <span style="font-size:12px;color:var(--text3);margin-left:6px;">${p.age ? '('+p.age+')' : ''} ${p.gender || ''}</span>
+        ${coachBerth ? `<span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:6px;">· ${coachBerth}</span>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div style="font-family:var(--mono);font-size:11px;color:var(--text3)">Booked: <span style="color:var(--text2)">${p.bookingStatus || '—'}</span></div>
@@ -2607,7 +2634,10 @@ async function renderPNRResult(d, container) {
           ${movement !== null ? `<span style="font-family:var(--mono);font-size:11px;color:${movement > 0 ? 'var(--teal)' : movement < 0 ? 'var(--red)' : 'var(--text3)'}">
             ${movement > 0 ? '↑' : movement < 0 ? '↓' : '—'}${Math.abs(movement)} pos</span>` : ''}
         </div>
-        <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${probColor(prob)}">${pct}%</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${probColor(prob)}">${pct}%</div>
+          <div style="font-family:var(--mono);font-size:10px;color:${apiPrediction ? 'var(--purple)' : 'var(--text3)'};">${apiPrediction ? '● IRCTC' : '● model'}</div>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -2645,8 +2675,10 @@ async function renderPNRResult(d, container) {
     <div class="pnr-grid">
       <div class="pnr-field"><div class="pnr-field-label">Journey Date</div><div class="pnr-field-value">${d.journeyDate || '—'}</div></div>
       <div class="pnr-field"><div class="pnr-field-label">Chart Status</div><div class="pnr-field-value" style="font-size:12px;color:var(--text2)">${d.chartStatus || '—'}</div></div>
-      <div class="pnr-field"><div class="pnr-field-label">Route</div><div class="pnr-field-value">${d.boardingStation || '?'} → ${d.destinationStation || '?'}</div></div>
+      <div class="pnr-field"><div class="pnr-field-label">Route</div><div class="pnr-field-value" style="font-size:12.5px;">${d.fromCode ? `<span style="font-family:var(--mono);font-size:11px;color:var(--text3)">(${d.fromCode})</span> ` : ''}${d.boardingStation || '?'} → ${d.destinationStation || '?'}${d.toCode ? ` <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">(${d.toCode})</span>` : ''}</div></div>
       <div class="pnr-field"><div class="pnr-field-label">Class · Quota</div><div class="pnr-field-value">${d.class || '—'} · ${d.quota || '—'}</div></div>
+      ${(d.departureTime || d.arrivalTime) ? `<div class="pnr-field"><div class="pnr-field-label">Departure · Arrival</div><div class="pnr-field-value" style="font-family:var(--mono);font-size:13px;">${d.departureTime || '—'} → ${d.arrivalTime || '—'}${d.duration ? ` <span style="color:var(--text3);font-size:11px;">(${d.duration}h)</span>` : ''}</div></div>` : ''}
+      ${d.fare ? `<div class="pnr-field"><div class="pnr-field-label">Fare</div><div class="pnr-field-value">₹${d.fare}</div></div>` : ''}
     </div>
     <div class="confirm-bar-wrap" style="margin-bottom:16px;">
       <div class="confirm-label-small">Overall confirmation probability</div>
@@ -2725,7 +2757,8 @@ function renderWatchlist() {
     const firstPax = d?.passengers?.[0];
     const qt = firstPax ? parseWLType(firstPax.currentStatus) : null;
     const wp = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
-    const prob = confirmationProbability(qt, wp, days, d?.class || 'SL', 'popular');
+    const apiPred = firstPax?.prediction || null;
+    const prob = bestProb(apiPred, qt, wp, days, d?.class || 'SL');
     const pct = Math.round(prob * 100);
     const lastCheck = new Date(entry.lastChecked);
     const minAgo = Math.round((new Date() - lastCheck) / 60000);
@@ -2781,7 +2814,7 @@ function addTrackerPNRByValue(pnr) {
     trainName: initData?.trainName || null,
     cls: initData?.class || 'SL',
     journeyDate: initData?.journeyDate || null,
-    history: initPos !== null ? [{ ts: now, pos: initPos, status: initPax?.currentStatus }] : []
+    history: initPos !== null ? [{ ts: now, pos: initPos, status: initPax?.currentStatus, prediction: initPax?.prediction || null }] : []
   });
   saveTracker(); renderTracker();
 }
@@ -2799,7 +2832,7 @@ async function refreshTracker() {
           const firstPax = pnrData.passengers?.[0];
           const pos = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
           if (pos !== null) {
-            entry.history.push({ ts: Date.now(), pos, status: firstPax.currentStatus });
+            entry.history.push({ ts: Date.now(), pos, status: firstPax.currentStatus, prediction: firstPax.prediction || null });
             entry.history = entry.history.slice(-50); // keep last 50 points
           }
           entry.trainName = pnrData.trainName;
@@ -2848,7 +2881,8 @@ function renderTracker() {
     const jDate = entry.journeyDate ? new Date(entry.journeyDate) : new Date(today.getTime() + 7*86400000);
     const days = Math.max(0, Math.round((jDate - today) / 86400000));
     const qt = latest ? parseWLType(latest.status) : null;
-    const prob = latest ? confirmationProbability(qt, parseWLPosition(latest.status), days, entry.cls || 'SL', 'popular') : 0;
+    const trackerApiPred = latest?.prediction || null;
+    const prob = latest ? bestProb(trackerApiPred, qt, parseWLPosition(latest.status), days, entry.cls || 'SL') : 0;
     const pct = Math.round(prob * 100);
 
     // Build SVG mini-chart
