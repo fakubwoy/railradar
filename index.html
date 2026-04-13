@@ -115,6 +115,8 @@ select.field-input { cursor: pointer; }
 .loader-spinner { width: 14px; height: 14px; border: 1.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
 .loader-status-text { font-family: var(--mono); font-size: 11px; color: var(--text3); }
 .loader-elapsed { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-left: auto; }
+.loader-cancel { background: transparent; border: 1px solid rgba(255,80,80,0.3); border-radius: 5px; color: var(--red); font-family: var(--mono); font-size: 10px; padding: 3px 10px; cursor: pointer; transition: all .15s; flex-shrink: 0; }
+.loader-cancel:hover { background: rgba(255,80,80,0.08); border-color: rgba(255,80,80,0.55); }
 
 /* live ticker tags */
 .loader-tags { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -411,6 +413,7 @@ select.field-input { cursor: pointer; }
       <div class="loader-spinner"></div>
       <div class="loader-status-text" id="search-loader-msg">Initialising search…</div>
       <div class="loader-elapsed" id="search-loader-elapsed"></div>
+      <button class="loader-cancel" onclick="cancelSearch('search')" title="Cancel search">✕ Cancel</button>
     </div>
     <div class="loader-tags" id="search-loader-tags"></div>
   </div>
@@ -460,6 +463,7 @@ select.field-input { cursor: pointer; }
       <div class="loader-spinner"></div>
       <div class="loader-status-text" id="route-loader-msg">Building route map…</div>
       <div class="loader-elapsed" id="route-loader-elapsed"></div>
+      <button class="loader-cancel" onclick="cancelSearch('route')" title="Cancel">✕ Cancel</button>
     </div>
   </div>
   <div id="route-error" class="error-strip" style="display:none;"></div>
@@ -514,6 +518,7 @@ select.field-input { cursor: pointer; }
       <div class="loader-spinner"></div>
       <div class="loader-status-text" id="split-loader-msg">Mapping split options…</div>
       <div class="loader-elapsed" id="split-loader-elapsed"></div>
+      <button class="loader-cancel" onclick="cancelSearch('split')" title="Cancel">✕ Cancel</button>
     </div>
   </div>
   <div id="split-error" class="error-strip" style="display:none;"></div>
@@ -546,6 +551,7 @@ select.field-input { cursor: pointer; }
       <div class="loader-spinner"></div>
       <div class="loader-status-text" id="pnr-loader-msg">Looking up PNR…</div>
       <div class="loader-elapsed" id="pnr-loader-elapsed"></div>
+      <button class="loader-cancel" onclick="cancelSearch('pnr')" title="Cancel">✕ Cancel</button>
     </div>
   </div>
   <div id="pnr-error" class="error-strip" style="display:none;"></div>
@@ -753,6 +759,7 @@ select.field-input { cursor: pointer; }
         <div class="loader-spinner"></div>
         <div class="loader-status-text" id="sa-train-loader-msg">Searching…</div>
         <div class="loader-elapsed" id="sa-train-loader-elapsed"></div>
+        <button class="loader-cancel" onclick="cancelSearch('sa-train')" title="Cancel">✕ Cancel</button>
       </div>
     </div>
     <div id="sa-train-error" class="error-strip" style="display:none;"></div>
@@ -779,6 +786,7 @@ select.field-input { cursor: pointer; }
         <div class="loader-spinner"></div>
         <div class="loader-status-text" id="sa-seg-loader-msg">Analysing segments…</div>
         <div class="loader-elapsed" id="sa-seg-loader-elapsed"></div>
+        <button class="loader-cancel" onclick="cancelSearch('sa-seg')" title="Cancel">✕ Cancel</button>
       </div>
     </div>
     <div id="sa-seg-error" class="error-strip" style="display:none;"></div>
@@ -856,6 +864,26 @@ let watchlist = JSON.parse(localStorage.getItem('railradar_watchlist') || '[]');
 let trackerData = JSON.parse(localStorage.getItem('railradar_tracker') || '[]');
 let lastPNRResult = null;
 let _lastTrains = null, _lastDate = null, _lastFrom = null, _lastTo = null;
+
+// ─── ABORT CONTROLLERS ──────────────────────
+// One controller per search "lane" — keyed by loader name
+const _abortControllers = {};
+
+function cancelSearch(name) {
+  const ctrl = _abortControllers[name];
+  if (ctrl) { ctrl.abort(); delete _abortControllers[name]; }
+}
+
+function newAbortController(name) {
+  cancelSearch(name); // kill any in-flight search first
+  const ctrl = new AbortController();
+  _abortControllers[name] = ctrl;
+  return ctrl;
+}
+
+function isCancelled(err) {
+  return err && (err.name === 'AbortError' || err.message === 'CANCELLED');
+}
 
 // ─── STATIONS ──────────────────────────────
 const STATIONS = [
@@ -1060,21 +1088,20 @@ function getDemoTrains(from, to) {
 // ═══════════════════════════════════════════
 const RAPIDAPI_HOST = 'irctc1.p.rapidapi.com';
 
-async function apiCall(endpoint, params) {
+async function apiCall(endpoint, params, signal) {
   if (!API_KEY) throw new Error('NO_KEY');
   const url = new URL('https://' + RAPIDAPI_HOST + endpoint);
   Object.entries(params).forEach(([k,v]) => url.searchParams.append(k, v));
   const res = await fetch(url.toString(), {
     method: 'GET',
-    headers: { 'X-RapidAPI-Key': API_KEY, 'X-RapidAPI-Host': RAPIDAPI_HOST }
+    headers: { 'X-RapidAPI-Key': API_KEY, 'X-RapidAPI-Host': RAPIDAPI_HOST },
+    signal: signal || null
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${errText.slice(0, 120)}`);
   }
   const json = await res.json();
-  // For availability endpoints, status:false means "no data for this combo" — callers handle it
-  // For all other endpoints, surface the API's own error message
   if (json.status === false && !endpoint.includes('checkSeatAvailability')) {
     throw new Error(json.message || 'API returned status:false');
   }
@@ -1418,6 +1445,13 @@ function renderGeminiAdvice(g) {
 //  UI HELPERS
 // ═══════════════════════════════════════════
 function showPanel(name, el) {
+  // Cancel any in-flight searches on the panel being left
+  ['search','route','split','pnr','sa-train','sa-seg'].forEach(k => {
+    const loaderEl = document.getElementById(
+      k === 'sa-train' ? 'sa-train-loader' : k === 'sa-seg' ? 'sa-seg-loader' : k + '-loader'
+    );
+    if (loaderEl && loaderEl.classList.contains('visible')) cancelSearch(k);
+  });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
@@ -1538,12 +1572,16 @@ async function searchTrains() {
   document.getElementById('search-loader').classList.add('visible');
   startLoaderElapsed('search');
 
+  const _ctrl = newAbortController('search');
+  const _signal = _ctrl.signal;
+
   try {
     let trains;
 
     if (!API_KEY) {
       // ─── DEMO MODE ───
       await sleep(600);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       trains = getDemoTrains(from, to).map((t, i) => {
         const simFn = selectedQuota === 'TQ' ? simulateTatkalAvail : selectedQuota === 'PT' ? simulatePremTatkalAvail : simulateAvailability;
         const simArgs = selectedQuota === 'GN' ? [i * 7, selectedClass, from, to] : [i * 5, selectedClass];
@@ -1560,7 +1598,7 @@ async function searchTrains() {
       setLoaderStep('ls', 1, 'Fetching trains between stations…');
       const data = await apiCall('/api/v3/trainBetweenStations', {
         fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
-      });
+      }, _signal);
       if (!data?.data?.length) {
         results.innerHTML = emptyState('No trains found', 'Try different stations or date. Make sure to use station codes (e.g. SC, MAS).');
         return;
@@ -1588,19 +1626,21 @@ async function searchTrains() {
       // TQ and PT are loaded on-demand via the "Load Tatkal & PT" button per card.
       // This reduces calls from (N trains × 3 quotas × 5 classes) down to (N trains × 1).
       for (let ti = 0; ti < trains.length; ti++) {
+        if (_signal.aborted) throw new DOMException('', 'AbortError');
         const tr = trains[ti];
         setLoaderStep('ls', 2, `Availability: train ${ti+1}/${trains.length}…`);
         try {
           const av = await apiCall('/api/v2/checkSeatAvailability', {
             classType: selectedClass, fromStationCode: tr.fromStation, quota: selectedQuota,
             toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
-          });
+          }, _signal);
           const parsed = parseV2Response(av, selectedClass, dmy);
           const entry = { class: selectedClass, ...parsed, quota: selectedQuota };
           tr.gnAvail = selectedQuota === 'GN' ? [entry] : [];
           tr.tqAvail = selectedQuota === 'TQ' ? [entry] : [];
           tr.ptAvail = selectedQuota === 'PT' ? [entry] : [];
         } catch(e) {
+          if (isCancelled(e)) throw e;
           const entry = { class: selectedClass, status: 'N/A', fare: null, apiCp: null, quota: selectedQuota };
           tr.gnAvail = selectedQuota === 'GN' ? [entry] : [];
           tr.tqAvail = selectedQuota === 'TQ' ? [entry] : [];
@@ -1618,8 +1658,9 @@ async function searchTrains() {
     renderTrainResults(trains, date, from, to);
 
   } catch(e) {
-    if (e.message === 'NO_KEY') {
-      // Shouldn't reach here but handle gracefully
+    if (isCancelled(e)) {
+      results.innerHTML = emptyState('Search cancelled', 'Start a new search whenever you\'re ready.');
+    } else if (e.message === 'NO_KEY') {
       results.innerHTML = emptyState('API key required', 'Add your RapidAPI key in the sidebar.');
     } else {
       errEl.textContent = 'Error: ' + e.message;
@@ -1628,6 +1669,7 @@ async function searchTrains() {
   } finally {
     document.getElementById('search-loader').classList.remove('visible');
     stopLoaderElapsed('search');
+    delete _abortControllers['search'];
   }
 }
 
@@ -1893,6 +1935,9 @@ async function planRoutes() {
   document.getElementById('route-loader').classList.add('visible');
   startLoaderElapsed('route');
 
+  const _ctrl = newAbortController('route');
+  const _signal = _ctrl.signal;
+
   try {
     const days = daysUntil(date);
     const hubs = corridorHubs(from, to);
@@ -1910,7 +1955,7 @@ async function planRoutes() {
       try {
         const data = await apiCall('/api/v3/trainBetweenStations', {
           fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
-        });
+        }, _signal);
         directTrains = (data?.data || []).map(t => ({
           trainNo: t.train_number || t.trainNo,
           trainName: t.train_name || t.trainName || 'Train',
@@ -1918,16 +1963,17 @@ async function planRoutes() {
           toStation: t.to_station_code || t.to || to,
           dep: t.from_std || '--', arr: t.to_std || '--', duration: t.duration || '--', days: formatRunDays(t.run_days)
         }));
-      } catch { directTrains = getDemoTrains(from, to); }
+      } catch(e) { if (isCancelled(e)) throw e; directTrains = getDemoTrains(from, to); }
     } else {
       await sleep(400);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       directTrains = getDemoTrains(from, to);
     }
 
     // Fetch availability for top 3 direct trains
     for (let i = 0; i < Math.min(3, directTrains.length); i++) {
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       const t = directTrains[i];
-      // Use actual boarding/alighting codes from the API (e.g. train may board at CHZ not SC)
       const boardAt = t.fromStation || from;
       const alightAt = t.toStation || to;
       let status = 'N/A';
@@ -1936,9 +1982,9 @@ async function planRoutes() {
           const av = await apiCall('/api/v2/checkSeatAvailability', {
             trainNo: t.trainNo, fromStationCode: boardAt, toStationCode: alightAt,
             classType: selectedClass, quota: 'GN', date: dmy
-          });
+          }, _signal);
           status = normalizeAvailStatus(parseV2Response(av, selectedClass, dmy).status);
-        } catch { status = simulateAvailability(i, selectedClass, from, to).status; }
+        } catch(e) { if (isCancelled(e)) throw e; status = simulateAvailability(i, selectedClass, from, to).status; }
       } else {
         status = simulateAvailability(i, selectedClass, from, to).status;
       }
@@ -1952,7 +1998,6 @@ async function planRoutes() {
         totalTime: t.duration, transfers: 0, days: t.days
       });
 
-      // Longer segment option: if PQWL, suggest booking to terminal
       if (qt === 'PQWL' || qt === 'RLWL') {
         const gnwlPos = Math.max(1, (wp || 15) + 8);
         const termStatus = `GNWL ${gnwlPos}`;
@@ -1971,8 +2016,10 @@ async function planRoutes() {
     // ─── 2. Alternate origin stations ───
     setLoaderStep('rl', 2, 'Checking alternate origin stations…');
     await sleep(200);
+    if (_signal.aborted) throw new DOMException('', 'AbortError');
 
     for (const altFrom of fromCity.filter(s => s !== from).slice(0, 2)) {
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       let altStatus = 'N/A';
       const altTrains = getDemoTrains(altFrom, to);
       if (altTrains.length) {
@@ -1981,9 +2028,9 @@ async function planRoutes() {
             const av = await apiCall('/api/v2/checkSeatAvailability', {
               trainNo: altTrains[0].trainNo, fromStationCode: altFrom, toStationCode: to,
               classType: selectedClass, quota: 'GN', date: dmy
-            });
+            }, _signal);
             altStatus = normalizeAvailStatus(parseV2Response(av, selectedClass, dmy).status);
-          } catch { altStatus = simulateAvailability(20, selectedClass, altFrom, to).status; }
+          } catch(e) { if (isCancelled(e)) throw e; altStatus = simulateAvailability(20, selectedClass, altFrom, to).status; }
         } else {
           altStatus = simulateAvailability(20, selectedClass, altFrom, to).status;
         }
@@ -2006,17 +2053,19 @@ async function planRoutes() {
     setLoaderStep('rl', 3, 'Analysing split options via interchange hubs…');
 
     for (const hub of hubs.slice(0, 3)) {
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       let leg1Trains = [], leg2Trains = [];
       if (API_KEY) {
         try {
-          const d1 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: from, toStationCode: hub, dateOfJourney: fmtDate(date) });
+          const d1 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: from, toStationCode: hub, dateOfJourney: fmtDate(date) }, _signal);
           leg1Trains = (d1?.data || []).map(t => ({ trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train', dep: t.from_std || '--', arr: t.to_std || '--' }));
-        } catch {}
+        } catch(e) { if (isCancelled(e)) throw e; }
         await sleep(150);
+        if (_signal.aborted) throw new DOMException('', 'AbortError');
         try {
-          const d2 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: hub, toStationCode: to, dateOfJourney: fmtDate(date) });
+          const d2 = await apiCall('/api/v3/trainBetweenStations', { fromStationCode: hub, toStationCode: to, dateOfJourney: fmtDate(date) }, _signal);
           leg2Trains = (d2?.data || []).map(t => ({ trainNo: t.train_number || t.trainNo, trainName: t.train_name || t.trainName || 'Train', dep: t.from_std || '--', arr: t.to_std || '--' }));
-        } catch {}
+        } catch(e) { if (isCancelled(e)) throw e; }
       } else {
         leg1Trains = getDemoTrains(from, hub);
         leg2Trains = getDemoTrains(hub, to);
@@ -2060,11 +2109,16 @@ async function planRoutes() {
     renderRouteResults(routes.slice(0, 8), from, to, days);
 
   } catch(e) {
-    errEl.textContent = 'Error: ' + e.message;
-    errEl.style.display = 'block';
+    if (isCancelled(e)) {
+      results.innerHTML = emptyState('Search cancelled', 'Start a new search whenever you\'re ready.');
+    } else {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.style.display = 'block';
+    }
   } finally {
     document.getElementById('route-loader').classList.remove('visible');
     stopLoaderElapsed('route');
+    delete _abortControllers['route'];
   }
 }
 
@@ -2202,6 +2256,9 @@ async function findSplits() {
   document.getElementById('split-loader').classList.add('visible');
   startLoaderElapsed('split');
 
+  const _ctrl = newAbortController('split');
+  const _signal = _ctrl.signal;
+
   const days = daysUntil(date);
   const dmy = date;
   const cls = selectedSplitClass;
@@ -2214,7 +2271,7 @@ async function findSplits() {
       try {
         const data = await apiCall('/api/v3/trainBetweenStations', {
           fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
-        });
+        }, _signal);
         directTrainList = (data?.data || []).map(t => ({
           trainNo: t.train_number || t.trainNo,
           trainName: t.train_name || t.trainName || 'Train',
@@ -2222,9 +2279,10 @@ async function findSplits() {
           toStation: t.to_station_code || t.to || to,
           dep: t.from_std || '--', arr: t.to_std || '--', duration: t.duration || '--'
         }));
-      } catch { directTrainList = getDemoTrains(from, to); }
+      } catch(e) { if (isCancelled(e)) throw e; directTrainList = getDemoTrains(from, to); }
     } else {
       await sleep(500);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       directTrainList = getDemoTrains(from, to);
     }
 
@@ -2385,11 +2443,16 @@ async function findSplits() {
     renderSplitResults(directStatus, bestDirectTrain, options, from, to, days);
 
   } catch(e) {
-    errEl.textContent = 'Error: ' + e.message;
-    errEl.style.display = 'block';
+    if (isCancelled(e)) {
+      results.innerHTML = emptyState('Search cancelled', 'Start a new search whenever you\'re ready.');
+    } else {
+      errEl.textContent = 'Error: ' + e.message;
+      errEl.style.display = 'block';
+    }
   } finally {
     document.getElementById('split-loader').classList.remove('visible');
     stopLoaderElapsed('split');
+    delete _abortControllers['split'];
   }
 }
 
@@ -2560,29 +2623,39 @@ async function checkPNR() {
   errEl.style.display = 'none';
   result.innerHTML = '';
 
+  const _ctrl = newAbortController('pnr');
+  const _signal = _ctrl.signal;
+
   try {
     let pnrData;
     if (!API_KEY) {
       await sleep(300);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       setLoaderStep('pl', 2, 'Parsing passenger & booking details…');
       await sleep(300);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       setLoaderStep('pl', 3, 'Computing confirmation probability…');
       await sleep(200);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       pnrData = demoPNR(pnr);
     } else {
-      const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: pnr });
+      const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: pnr }, _signal);
       if (!data?.data) throw new Error('PNR not found or invalid response.');
       setLoaderStep('pl', 2, 'Parsing passenger & booking details…');
       await sleep(200);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       setLoaderStep('pl', 3, 'Computing confirmation probability…');
       await sleep(150);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       pnrData = normalizePNR(data.data, pnr);
     }
     lastPNRResult = pnrData;
     await renderPNRResult(pnrData, result);
     if (!API_KEY) result.insertAdjacentHTML('afterbegin', `<div class="demo-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Demo mode — showing example PNR data</div>`);
   } catch(e) {
-    if (e.message === 'NO_KEY') {
+    if (isCancelled(e)) {
+      result.innerHTML = emptyState('Lookup cancelled', 'Enter a PNR and try again.');
+    } else if (e.message === 'NO_KEY') {
       const pd = demoPNR(pnr);
       lastPNRResult = pd;
       await renderPNRResult(pd, result);
@@ -2594,6 +2667,7 @@ async function checkPNR() {
   } finally {
     loader.classList.remove('visible');
     stopLoaderElapsed('pnr');
+    delete _abortControllers['pnr'];
   }
 }
 
@@ -3214,10 +3288,14 @@ async function saSearchTrains() {
   saTrainLoaderCtrl.start();
   startLoaderElapsed('sa-train');
 
+  const _ctrl = newAbortController('sa-train');
+  const _signal = _ctrl.signal;
+
   try {
     let trains = [];
     if (!API_KEY) {
       await sleep(600);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       trains = getDemoTrains(from, to).map(t => ({
         trainNo: t.trainNo, trainName: t.trainName,
         fromStation: from, toStation: to,
@@ -3227,7 +3305,7 @@ async function saSearchTrains() {
       saTrainLoaderCtrl.advanceStep(0, 'Fetching trains');
       const data = await apiCall('/api/v3/trainBetweenStations', {
         fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
-      });
+      }, _signal);
       trains = (data?.data || []).map(t => ({
         trainNo: t.train_number || t.trainNo,
         trainName: t.train_name || t.trainName || 'Train',
@@ -3251,8 +3329,16 @@ async function saSearchTrains() {
     renderSaTrainList(trains);
   } catch(e) {
     saTrainLoaderCtrl.hide();
-    document.getElementById('sa-train-error').textContent = 'Error: ' + e.message;
-    document.getElementById('sa-train-error').style.display = 'block';
+    document.getElementById('sa-train-loader').classList.remove('visible');
+    if (isCancelled(e)) {
+      document.getElementById('sa-train-results').innerHTML = emptyState('Search cancelled', 'Start a new search whenever you\'re ready.');
+    } else {
+      document.getElementById('sa-train-error').textContent = 'Error: ' + e.message;
+      document.getElementById('sa-train-error').style.display = 'block';
+    }
+  } finally {
+    stopLoaderElapsed('sa-train');
+    delete _abortControllers['sa-train'];
   }
 }
 
@@ -3296,23 +3382,24 @@ async function saPickTrain(idx) {
   saSegLoaderCtrl.start();
   startLoaderElapsed('sa-seg');
 
+  const _ctrl = newAbortController('sa-seg');
+  const _signal = _ctrl.signal;
+
   try {
     // Step 1: Get intermediate stations
     saSegLoaderCtrl.advanceStep(0, 'Fetching route');
     let stops = [];
     if (!API_KEY) {
       await sleep(500);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       stops = saGenerateDemoStops(saCurrentTrain.trainNo, saCurrentTrain.fromStation, saCurrentTrain.toStation);
     } else {
       try {
-        // Endpoint: /api/v1/getTrainSchedule — response shape confirmed from live API:
-        // { status:true, data: { route: [ {station_code, station_name, stop, sta, std_min, day, ...} ] } }
-        const rData = await apiCall('/api/v1/getTrainSchedule', { trainNo: saCurrentTrain.trainNo });
+        const rData = await apiCall('/api/v1/getTrainSchedule', { trainNo: saCurrentTrain.trainNo }, _signal);
 
-        // Extract the route array — handle all known shapes
         let rawRoute = [];
         if (Array.isArray(rData?.data?.route)) {
-          rawRoute = rData.data.route;                        // ← confirmed shape
+          rawRoute = rData.data.route;
         } else if (Array.isArray(rData?.data)) {
           rawRoute = rData.data;
         } else if (Array.isArray(rData?.data?.stationList)) {
@@ -3322,15 +3409,12 @@ async function saPickTrain(idx) {
         }
         if (!rawRoute.length) throw new Error('Empty schedule response');
 
-        // Convert minutes-since-midnight (sta/std_min) to HH:MM string
         function minsToHHMM(m) {
           if (m == null || m < 0) return '--';
-          const mm = m % 1440; // handle >24h trains
+          const mm = m % 1440;
           return String(Math.floor(mm / 60)).padStart(2,'0') + ':' + String(mm % 60).padStart(2,'0');
         }
 
-        // Keep only HALTING stations (stop:true) — skip non-stop waypoints (cabins, block huts etc.)
-        // Also always include the first and last station regardless of stop flag.
         const haltingOnly = rawRoute.filter((s, i) =>
           s.stop === true || i === 0 || i === rawRoute.length - 1
         );
@@ -3343,14 +3427,13 @@ async function saPickTrain(idx) {
           day:  s.day || s.d_day || 1,
         })).filter(s => s.code);
 
-        // Slice between user's boarding and alighting station
         const fromIdx = normStops.findIndex(s => s.code === saCurrentTrain.fromStation.toUpperCase());
         const toIdx   = normStops.findIndex(s => s.code === saCurrentTrain.toStation.toUpperCase());
         const startI  = fromIdx >= 0 ? fromIdx : 0;
         const endI    = toIdx   >= 0 ? toIdx   : normStops.length - 1;
         stops = normStops.slice(startI, endI + 1);
       } catch(e) {
-        // If schedule API fails for any reason, fall back to corridor-based demo stops
+        if (isCancelled(e)) throw e;
         stops = saGenerateDemoStops(saCurrentTrain.trainNo, saCurrentTrain.fromStation, saCurrentTrain.toStation);
       }
     }
@@ -3366,6 +3449,7 @@ async function saPickTrain(idx) {
 
     if (!API_KEY) {
       await sleep(800);
+      if (_signal.aborted) throw new DOMException('', 'AbortError');
       for (let i = 0; i < total; i++) {
         const s = stops[i], e = stops[i + 1];
         const sim = simulateAvailability(i * 11 + saSelectedClass.charCodeAt(0), saSelectedClass, s.code, e.code);
@@ -3377,10 +3461,9 @@ async function saPickTrain(idx) {
                         status: sim.status, fare: null, apiCp: null, prob, qt, wp });
       }
     } else {
-      // Treat each consecutive stop pair as actual from/to — same pattern as Find Trains.
-      // checkSeatAvailability works fine with any two valid halt stations on the route.
       const BATCH = 4;
       for (let b = 0; b < total; b += BATCH) {
+        if (_signal.aborted) throw new DOMException('', 'AbortError');
         const chunk = [];
         for (let i = b; i < Math.min(b + BATCH, total); i++) chunk.push(i);
         saSegLoaderCtrl.advanceStep(1, `Segment ${b+1}–${Math.min(b+BATCH, total)} / ${total}`);
@@ -3390,7 +3473,7 @@ async function saPickTrain(idx) {
             const av = await apiCall('/api/v2/checkSeatAvailability', {
               classType: saSelectedClass, fromStationCode: s.code, quota: saSelectedQuota,
               toStationCode: e.code, trainNo: saCurrentTrain.trainNo, date: saSearchDate
-            });
+            }, _signal);
             const parsed = parseV2Response(av, saSelectedClass, saSearchDate);
             const qt = parseWLType(parsed.status);
             const wp = parseWLPosition(parsed.status);
@@ -3399,7 +3482,8 @@ async function saPickTrain(idx) {
             return { from: s.code, fromName: s.name, fromArr: s.arr, fromDep: s.dep,
                      to: e.code, toName: e.name, toArr: e.arr, toDep: e.dep,
                      status: parsed.status, fare: parsed.fare, apiCp: parsed.apiCp, prob, qt, wp };
-          } catch {
+          } catch(e) {
+            if (isCancelled(e)) throw e;
             return { from: s.code, fromName: s.name, fromArr: s.arr, fromDep: s.dep,
                      to: e.code, toName: e.name, toArr: e.arr, toDep: e.dep,
                      status: 'N/A', fare: null, apiCp: null, prob: 0, qt: null, wp: null };
@@ -3419,8 +3503,16 @@ async function saPickTrain(idx) {
     renderSaSegmentTable(segments, stops);
   } catch(e) {
     saSegLoaderCtrl.hide();
-    document.getElementById('sa-seg-error').textContent = 'Error: ' + e.message;
-    document.getElementById('sa-seg-error').style.display = 'block';
+    document.getElementById('sa-seg-loader').classList.remove('visible');
+    if (isCancelled(e)) {
+      document.getElementById('sa-seg-results').innerHTML = emptyState('Cancelled', 'Go back to trains and try again.');
+    } else {
+      document.getElementById('sa-seg-error').textContent = 'Error: ' + e.message;
+      document.getElementById('sa-seg-error').style.display = 'block';
+    }
+  } finally {
+    stopLoaderElapsed('sa-seg');
+    delete _abortControllers['sa-seg'];
   }
 }
 
@@ -3548,6 +3640,7 @@ function renderSaSegmentTable(segments, stops) {
 }
 
 function saBackToTrains() {
+  cancelSearch('sa-seg');
   document.getElementById('sa-step2').style.display = 'none';
   document.getElementById('sa-step1').style.display = '';
 }
