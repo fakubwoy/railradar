@@ -307,6 +307,7 @@ select.field-input { cursor: pointer; }
     <div class="nav-item active" onclick="showPanel('search',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span> Find Trains</div>
     <div class="nav-item" onclick="showPanel('routes',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></span> Route Planner</div>
     <div class="nav-item" onclick="showPanel('split',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></span> Split Journeys</div>
+    <div class="nav-item" onclick="showPanel('segavail',this)"><span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></span> Segment Availability <span class="nav-badge blue">NEW</span></div>
   </div>
 
   <div class="nav-section" style="margin-top:6px">
@@ -690,22 +691,150 @@ select.field-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- ═══ SEGMENT AVAILABILITY ═══ -->
+<div id="panel-segavail" class="panel">
+  <div class="page-title">Segment Availability</div>
+  <div class="page-sub">Find available trains, then drill into seat availability for every intermediate segment — from your boarding station to destination, hop by hop. Select class and quota, then export to Excel.</div>
+
+  <!-- Step 1: Search trains -->
+  <div id="sa-step1">
+    <div class="search-grid">
+      <div class="field-group">
+        <div class="field-label">From Station</div>
+        <div class="autocomplete-wrap">
+          <input class="field-input" id="sa-from" placeholder="e.g. NDLS, Delhi" autocomplete="off" oninput="acInput(this,'sa-from-dd')" onblur="acBlur('sa-from-dd')">
+          <div class="autocomplete-dropdown" id="sa-from-dd"></div>
+        </div>
+      </div>
+      <div class="field-group" style="position:relative">
+        <div class="field-label">To Station</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <button class="swap-btn" onclick="swapStations('sa-from','sa-to')" title="Swap">⇄</button>
+          <div class="autocomplete-wrap" style="flex:1;">
+            <input class="field-input" id="sa-to" placeholder="e.g. BPL, Bhopal" autocomplete="off" oninput="acInput(this,'sa-to-dd')" onblur="acBlur('sa-to-dd')">
+            <div class="autocomplete-dropdown" id="sa-to-dd"></div>
+          </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Date of Journey</div>
+        <input class="field-input" id="sa-date" type="date">
+      </div>
+      <button class="btn-primary" onclick="saSearchTrains()">Search →</button>
+    </div>
+
+    <!-- Class & Quota selectors -->
+    <div style="margin-bottom:16px;">
+      <div class="field-label" style="margin-bottom:6px;">Travel Class</div>
+      <div class="class-tabs" id="sa-class-tabs">
+        <div class="class-tab" onclick="saSelectClass(this,'SL')">SL — Sleeper</div>
+        <div class="class-tab active" onclick="saSelectClass(this,'3A')">3A — Third AC</div>
+        <div class="class-tab" onclick="saSelectClass(this,'2A')">2A — Second AC</div>
+        <div class="class-tab" onclick="saSelectClass(this,'1A')">1A — First AC</div>
+        <div class="class-tab" onclick="saSelectClass(this,'CC')">CC — Chair Car</div>
+        <div class="class-tab" onclick="saSelectClass(this,'2S')">2S — Second Sitting</div>
+      </div>
+      <div class="field-label" style="margin-bottom:6px;">Quota</div>
+      <div class="quota-tabs" id="sa-quota-tabs">
+        <div class="quota-tab active" onclick="saSelectQuota(this,'GN')">GN — General</div>
+        <div class="quota-tab tatkal" onclick="saSelectQuota(this,'TQ')">TQ — Tatkal</div>
+        <div class="quota-tab pt" onclick="saSelectQuota(this,'PT')">PT — Premium Tatkal</div>
+      </div>
+    </div>
+
+    <!-- Loader -->
+    <div id="sa-train-loader" class="loader">
+      <div class="loader-steps">
+        <div class="loader-step active" id="satl-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Fetching trains between stations…</span><span class="step-time" id="satl-1-t"></span></div>
+        <div class="loader-step" id="satl-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Validating results…</span><span class="step-time" id="satl-2-t"></span></div>
+      </div>
+      <div class="loader-bar-wrap"><div class="loader-bar-fill" id="sa-train-loader-bar" style="width:0%"></div></div>
+      <div class="loader-status">
+        <div class="loader-spinner"></div>
+        <div class="loader-status-text" id="sa-train-loader-msg">Searching…</div>
+        <div class="loader-elapsed" id="sa-train-loader-elapsed"></div>
+      </div>
+    </div>
+    <div id="sa-train-error" class="error-strip" style="display:none;"></div>
+    <div id="sa-train-results"></div>
+  </div>
+
+  <!-- Step 2: Segment table (shown after picking a train) -->
+  <div id="sa-step2" style="display:none;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+      <button class="btn-secondary" onclick="saBackToTrains()">← Back to trains</button>
+      <div id="sa-selected-train-label" style="font-family:var(--mono);font-size:12px;color:var(--text2);"></div>
+      <button class="btn-primary" style="margin-left:auto;" onclick="saExportExcel()">↓ Export Excel</button>
+    </div>
+
+    <!-- Segment loader -->
+    <div id="sa-seg-loader" class="loader">
+      <div class="loader-steps">
+        <div class="loader-step active" id="sasl-1"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Fetching train route &amp; intermediate stations…</span><span class="step-time" id="sasl-1-t"></span></div>
+        <div class="loader-step" id="sasl-2"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Checking availability for each segment…</span><span class="step-time" id="sasl-2-t"></span></div>
+        <div class="loader-step" id="sasl-3"><div class="step-dot"><div class="step-dot-inner"></div></div><span>Computing confirmation probabilities…</span><span class="step-time" id="sasl-3-t"></span></div>
+      </div>
+      <div class="loader-bar-wrap"><div class="loader-bar-fill" id="sa-seg-loader-bar" style="width:0%"></div></div>
+      <div class="loader-status">
+        <div class="loader-spinner"></div>
+        <div class="loader-status-text" id="sa-seg-loader-msg">Analysing segments…</div>
+        <div class="loader-elapsed" id="sa-seg-loader-elapsed"></div>
+      </div>
+    </div>
+    <div id="sa-seg-error" class="error-strip" style="display:none;"></div>
+    <div id="sa-seg-results"></div>
+  </div>
+</div>
+
 </main>
 </div>
 
 <datalist id="station-list">
   <option value="SC">Secunderabad</option>
-  <option value="HYB">Hyderabad</option>
+  <option value="HYB">Hyderabad Deccan</option>
   <option value="KCG">Kacheguda</option>
   <option value="MAS">Chennai Central</option>
+  <option value="MBM">Chennai Egmore</option>
   <option value="KPD">Katpadi</option>
   <option value="BZA">Vijayawada</option>
   <option value="NDLS">New Delhi</option>
+  <option value="NZM">Hazrat Nizamuddin</option>
+  <option value="DLI">Old Delhi</option>
+  <option value="ANVT">Anand Vihar Terminal</option>
   <option value="BCT">Mumbai Central</option>
+  <option value="CSTM">Chhatrapati Shivaji Terminus</option>
+  <option value="LTT">Lokmanya Tilak Terminus</option>
+  <option value="BDTS">Bandra Terminus</option>
   <option value="SBC">Bangalore City</option>
   <option value="YPR">Yesvantpur</option>
   <option value="NGP">Nagpur</option>
   <option value="HWH">Howrah</option>
+  <option value="SDAH">Sealdah</option>
+  <option value="BPL">Bhopal</option>
+  <option value="HBJ">Habibganj (Rani Kamlapati)</option>
+  <option value="ST">Surat</option>
+  <option value="ADI">Ahmedabad</option>
+  <option value="BRC">Vadodara</option>
+  <option value="PUNE">Pune</option>
+  <option value="LKO">Lucknow</option>
+  <option value="CNB">Kanpur Central</option>
+  <option value="ALD">Prayagraj</option>
+  <option value="BSB">Varanasi</option>
+  <option value="GKP">Gorakhpur</option>
+  <option value="AGC">Agra Cantt</option>
+  <option value="JP">Jaipur</option>
+  <option value="JU">Jodhpur</option>
+  <option value="PNBE">Patna</option>
+  <option value="VSKP">Visakhapatnam</option>
+  <option value="TVC">Thiruvananthapuram</option>
+  <option value="ERS">Ernakulam (Kochi)</option>
+  <option value="CBE">Coimbatore</option>
+  <option value="MDU">Madurai</option>
+  <option value="TPJ">Tiruchirappalli</option>
+  <option value="GHY">Guwahati</option>
+  <option value="BBS">Bhubaneswar</option>
+  <option value="CDG">Chandigarh</option>
+  <option value="ASR">Amritsar</option>
 </datalist>
 
 <script src="config.js"></script>
@@ -730,34 +859,111 @@ let _lastTrains = null, _lastDate = null, _lastFrom = null, _lastTo = null;
 
 // ─── STATIONS ──────────────────────────────
 const STATIONS = [
+  // Hyderabad
   {code:'SC',name:'Secunderabad Junction',city:'Hyderabad'},{code:'HYB',name:'Hyderabad Deccan',city:'Hyderabad'},
-  {code:'KCG',name:'Kacheguda',city:'Hyderabad'},{code:'MAS',name:'Chennai Central',city:'Chennai'},
-  {code:'MSB',name:'Chennai Beach',city:'Chennai'},{code:'KPD',name:'Katpadi Junction',city:'Vellore'},
-  {code:'BZA',name:'Vijayawada Junction',city:'Vijayawada'},{code:'NDLS',name:'New Delhi',city:'Delhi'},
-  {code:'NZM',name:'Hazrat Nizamuddin',city:'Delhi'},{code:'BCT',name:'Mumbai Central',city:'Mumbai'},
-  {code:'CSTM',name:'Chhatrapati Shivaji Terminus',city:'Mumbai'},{code:'LTT',name:'Lokmanya Tilak Terminus',city:'Mumbai'},
-  {code:'SBC',name:'KSR Bengaluru City',city:'Bangalore'},{code:'YPR',name:'Yesvantpur Junction',city:'Bangalore'},
+  {code:'KCG',name:'Kacheguda',city:'Hyderabad'},
+  // Chennai
+  {code:'MAS',name:'Chennai Central',city:'Chennai'},{code:'MSB',name:'Chennai Beach',city:'Chennai'},
+  {code:'MBM',name:'Chennai Egmore',city:'Chennai'},
+  // Andhra / Telangana
+  {code:'KPD',name:'Katpadi Junction',city:'Vellore'},{code:'BZA',name:'Vijayawada Junction',city:'Vijayawada'},
   {code:'GTL',name:'Guntakal Junction',city:'Guntakal'},{code:'RU',name:'Renigunta Junction',city:'Tirupati'},
-  {code:'TPT',name:'Tirupati',city:'Tirupati'},{code:'GNT',name:'Guntur Junction',city:'Guntur'},
+  {code:'TPTY',name:'Tirupati Junction',city:'Tirupati'},{code:'GNT',name:'Guntur Junction',city:'Guntur'},
   {code:'WL',name:'Warangal',city:'Warangal'},{code:'KZJ',name:'Kazipet Junction',city:'Warangal'},
-  {code:'BPQ',name:'Balharshah',city:'Chandrapur'},{code:'NGP',name:'Nagpur Junction',city:'Nagpur'},
-  {code:'HWH',name:'Howrah Junction',city:'Kolkata'},{code:'PNBE',name:'Patna Junction',city:'Patna'},
-  {code:'LKO',name:'Lucknow',city:'Lucknow'},{code:'AGC',name:'Agra Cantt',city:'Agra'},
-  {code:'PUNE',name:'Pune Junction',city:'Pune'},{code:'CBE',name:'Coimbatore Junction',city:'Coimbatore'},
-  {code:'MDU',name:'Madurai Junction',city:'Madurai'},{code:'ED',name:'Erode Junction',city:'Erode'},
-  {code:'SA',name:'Salem Junction',city:'Salem'},{code:'AWY',name:'Arakkonam Junction',city:'Arakkonam'},
-  {code:'JU',name:'Jodhpur Junction',city:'Jodhpur'},{code:'JP',name:'Jaipur Junction',city:'Jaipur'},
-  {code:'ADI',name:'Ahmedabad Junction',city:'Ahmedabad'},{code:'VSKP',name:'Visakhapatnam',city:'Vizag'},
-  {code:'TPTY',name:'Tirupati',city:'Tirupati'},{code:'NLR',name:'Nellore',city:'Nellore'},
-  {code:'OGL',name:'Ongole',city:'Ongole'},{code:'TEL',name:'Tenali Junction',city:'Tenali'},
+  {code:'BPQ',name:'Balharshah',city:'Chandrapur'},{code:'VSKP',name:'Visakhapatnam Junction',city:'Visakhapatnam'},
+  {code:'NLR',name:'Nellore Junction',city:'Nellore'},{code:'OGL',name:'Ongole',city:'Ongole'},
+  {code:'TEL',name:'Tenali Junction',city:'Tenali'},{code:'MTM',name:'Machilipatnam',city:'Machilipatnam'},
+  {code:'GDR',name:'Gudur Junction',city:'Gudur'},{code:'NLDA',name:'Nalgonda',city:'Nalgonda'},
+  {code:'KRMR',name:'Karimnagar',city:'Karimnagar'},
+  // Delhi
+  {code:'NDLS',name:'New Delhi',city:'Delhi'},{code:'NZM',name:'Hazrat Nizamuddin',city:'Delhi'},
+  {code:'DLI',name:'Old Delhi Junction',city:'Delhi'},{code:'DSA',name:'Delhi Sarai Rohilla',city:'Delhi'},
+  {code:'ANVT',name:'Anand Vihar Terminal',city:'Delhi'},
+  // Mumbai
+  {code:'BCT',name:'Mumbai Central',city:'Mumbai'},{code:'CSTM',name:'Chhatrapati Shivaji Terminus',city:'Mumbai'},
+  {code:'LTT',name:'Lokmanya Tilak Terminus',city:'Mumbai'},{code:'DR',name:'Dadar',city:'Mumbai'},
+  {code:'BDTS',name:'Bandra Terminus',city:'Mumbai'},
+  // Bangalore
+  {code:'SBC',name:'KSR Bengaluru City',city:'Bangalore'},{code:'YPR',name:'Yesvantpur Junction',city:'Bangalore'},
+  {code:'BNC',name:'Bangalore Cantonment',city:'Bangalore'},{code:'KJM',name:'Krishnarajapuram',city:'Bangalore'},
+  // Nagpur
+  {code:'NGP',name:'Nagpur Junction',city:'Nagpur'},
+  // Kolkata
+  {code:'HWH',name:'Howrah Junction',city:'Kolkata'},{code:'SDAH',name:'Sealdah',city:'Kolkata'},
+  {code:'CCU',name:'Kolkata',city:'Kolkata'},
+  // Patna / Bihar
+  {code:'PNBE',name:'Patna Junction',city:'Patna'},{code:'GAYA',name:'Gaya Junction',city:'Gaya'},
+  {code:'BGP',name:'Bhagalpur Junction',city:'Bhagalpur'},{code:'MFP',name:'Muzaffarpur Junction',city:'Muzaffarpur'},
+  // UP
+  {code:'LKO',name:'Lucknow Charbagh',city:'Lucknow'},{code:'AGC',name:'Agra Cantt',city:'Agra'},
+  {code:'AF',name:'Agra Fort',city:'Agra'},{code:'ALJN',name:'Aligarh Junction',city:'Aligarh'},
+  {code:'CNB',name:'Kanpur Central',city:'Kanpur'},{code:'ALD',name:'Prayagraj Junction',city:'Prayagraj'},
+  {code:'BSB',name:'Varanasi Junction',city:'Varanasi'},{code:'MGS',name:'Mughal Sarai Junction',city:'Varanasi'},
+  {code:'MB',name:'Moradabad Junction',city:'Moradabad'},{code:'GKP',name:'Gorakhpur Junction',city:'Gorakhpur'},
+  {code:'MTS',name:'Mathura Junction',city:'Mathura'},{code:'INDB',name:'Indore Junction',city:'Indore'},
+  // MP
+  {code:'BPL',name:'Bhopal Junction',city:'Bhopal'},{code:'HBJ',name:'Habibganj (Rani Kamlapati)',city:'Bhopal'},
+  {code:'ET',name:'Itarsi Junction',city:'Hoshangabad'},{code:'JBP',name:'Jabalpur Junction',city:'Jabalpur'},
+  {code:'GWL',name:'Gwalior Junction',city:'Gwalior'},
+  // Rajasthan
+  {code:'JP',name:'Jaipur Junction',city:'Jaipur'},{code:'JU',name:'Jodhpur Junction',city:'Jodhpur'},
+  {code:'UDZ',name:'Udaipur City',city:'Udaipur'},{code:'AII',name:'Ajmer Junction',city:'Ajmer'},
+  {code:'BKN',name:'Bikaner Junction',city:'Bikaner'},
+  // Gujarat
+  {code:'ADI',name:'Ahmedabad Junction',city:'Ahmedabad'},{code:'ST',name:'Surat',city:'Surat'},
+  {code:'BRC',name:'Vadodara Junction',city:'Vadodara'},{code:'RJT',name:'Rajkot Junction',city:'Rajkot'},
+  {code:'BVP',name:'Bhavnagar Terminus',city:'Bhavnagar'},{code:'ADI',name:'Ahmedabad Junction',city:'Ahmedabad'},
+  // Pune / Maharashtra
+  {code:'PUNE',name:'Pune Junction',city:'Pune'},{code:'KOP',name:'Kolhapur',city:'Kolhapur'},
+  {code:'NSK',name:'Nashik Road',city:'Nashik'},{code:'AWB',name:'Aurangabad Junction',city:'Aurangabad'},
+  {code:'SUR',name:'Solapur Junction',city:'Solapur'},{code:'NMT',name:'Nanded Junction',city:'Nanded'},
+  // Tamil Nadu
+  {code:'CBE',name:'Coimbatore Junction',city:'Coimbatore'},{code:'MDU',name:'Madurai Junction',city:'Madurai'},
+  {code:'ED',name:'Erode Junction',city:'Erode'},{code:'SA',name:'Salem Junction',city:'Salem'},
+  {code:'AWY',name:'Arakkonam Junction',city:'Arakkonam'},{code:'TPJ',name:'Tiruchirappalli Junction',city:'Trichy'},
+  {code:'TN',name:'Tirunelveli Junction',city:'Tirunelveli'},{code:'TBM',name:'Tambaram',city:'Chennai'},
+  // Kerala
+  {code:'TVC',name:'Thiruvananthapuram Central',city:'Thiruvananthapuram'},{code:'ERS',name:'Ernakulam Junction',city:'Kochi'},
+  {code:'SRR',name:'Shoranur Junction',city:'Palakkad'},{code:'CLT',name:'Kozhikode',city:'Kozhikode'},
+  {code:'QLN',name:'Kollam Junction',city:'Kollam'},{code:'TCR',name:'Thrissur',city:'Thrissur'},
+  // Karnataka
+  {code:'UBL',name:'Hubballi Junction',city:'Hubballi'},{code:'DWR',name:'Dharwad',city:'Dharwad'},
+  {code:'BGM',name:'Belagavi',city:'Belagavi'},{code:'GR',name:'Gulbarga Junction',city:'Kalaburagi'},
+  {code:'BIDR',name:'Bidar',city:'Bidar'},
+  // Haryana / Punjab / HP
+  {code:'CDG',name:'Chandigarh Junction',city:'Chandigarh'},{code:'LDH',name:'Ludhiana Junction',city:'Ludhiana'},
+  {code:'ASR',name:'Amritsar Junction',city:'Amritsar'},{code:'UMB',name:'Ambala Cantt',city:'Ambala'},
+  {code:'FZR',name:'Firozpur Cantt',city:'Firozpur'},
+  // Jharkhand / Odisha / WB
+  {code:'RCHI',name:'Ranchi Junction',city:'Ranchi'},{code:'DHN',name:'Dhanbad Junction',city:'Dhanbad'},
+  {code:'BBS',name:'Bhubaneswar',city:'Bhubaneswar'},{code:'PURI',name:'Puri',city:'Puri'},
+  {code:'CTC',name:'Cuttack Junction',city:'Cuttack'},
+  // Assam / NE
+  {code:'GHY',name:'Guwahati',city:'Guwahati'},{code:'DBRG',name:'Dibrugarh',city:'Dibrugarh'},
 ];
 const STATION_NAMES = {};
 STATIONS.forEach(s => { STATION_NAMES[s.code] = s.name; });
 
 const CITY_STATIONS = {
-  'HYDERABAD': ['SC','HYB','KCG'], 'CHENNAI': ['MAS','MSB'],
-  'BANGALORE': ['SBC','YPR'], 'DELHI': ['NDLS','NZM'],
-  'MUMBAI': ['BCT','CSTM','LTT'],
+  'HYDERABAD': ['SC','HYB','KCG'], 'SECUNDERABAD': ['SC','HYB','KCG'],
+  'CHENNAI': ['MAS','MSB','MBM'], 'MADRAS': ['MAS','MSB'],
+  'BANGALORE': ['SBC','YPR','BNC'], 'BENGALURU': ['SBC','YPR','BNC'],
+  'DELHI': ['NDLS','NZM','DLI','ANVT'], 'NEW DELHI': ['NDLS','NZM','DLI'],
+  'MUMBAI': ['BCT','CSTM','LTT','BDTS'], 'BOMBAY': ['BCT','CSTM','LTT'],
+  'PUNE': ['PUNE'], 'NAGPUR': ['NGP'],
+  'KOLKATA': ['HWH','SDAH'], 'CALCUTTA': ['HWH','SDAH'],
+  'AHMEDABAD': ['ADI'], 'SURAT': ['ST'],
+  'BHOPAL': ['BPL','HBJ'], 'INDORE': ['INDB'],
+  'JAIPUR': ['JP'], 'JODHPUR': ['JU'],
+  'LUCKNOW': ['LKO'], 'KANPUR': ['CNB'],
+  'VARANASI': ['BSB','MGS'], 'PRAYAGRAJ': ['ALD'], 'ALLAHABAD': ['ALD'],
+  'PATNA': ['PNBE'], 'VISAKHAPATNAM': ['VSKP'], 'VIZAG': ['VSKP'],
+  'KOCHI': ['ERS'], 'THIRUVANANTHAPURAM': ['TVC'], 'TRIVANDRUM': ['TVC'],
+  'CHANDIGARH': ['CDG'], 'AMRITSAR': ['ASR'],
+  'BHUBANESWAR': ['BBS'], 'GUWAHATI': ['GHY'],
+  'VADODARA': ['BRC'], 'BARODA': ['BRC'],
+  'COIMBATORE': ['CBE'], 'MADURAI': ['MDU'],
+  'TRICHY': ['TPJ'], 'RANCHI': ['RCHI'],
 };
 
 // ─── CORRIDOR HUBS ───────────────────────────
@@ -774,6 +980,22 @@ const CORRIDOR_HUBS = {
   'SC-BCT': ['NGP','PUNE'],
   'HYB-BCT': ['NGP','PUNE'],
   'SBC-NDLS': ['NGP','LKO'],
+  'SC-BPL': ['NGP','ET'],
+  'HYB-BPL': ['NGP','ET'],
+  'SC-ADI': ['NGP','PUNE','ST'],
+  'HYB-ADI': ['NGP','PUNE','ST'],
+  'MAS-BCT': ['CBE','PUNE'],
+  'MAS-ADI': ['CBE','PUNE','ST'],
+  'NDLS-BCT': ['BPL','ET','NGP'],
+  'NDLS-ADI': ['JP','AII'],
+  'NDLS-LKO': ['CNB'],
+  'NDLS-BSB': ['CNB','ALD'],
+  'NDLS-PNBE': ['CNB','ALD','MGS'],
+  'NDLS-HWH': ['CNB','ALD','PNBE'],
+  'SC-HWH': ['BZA','VSKP','BBS'],
+  'MAS-HWH': ['BZA','VSKP','BBS'],
+  'SBC-BCT': ['PUNE'],
+  'SBC-MAS': ['KPD','SA'],
 };
 
 function corridorHubs(from, to) {
@@ -1309,12 +1531,16 @@ async function searchTrains() {
     if (!API_KEY) {
       // ─── DEMO MODE ───
       await sleep(600);
-      const allClasses = ['SL','3A','2A','1A','CC'];
       trains = getDemoTrains(from, to).map((t, i) => {
-        const gnAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulateAvailability(i * 7 + ci, cls, from, to), quota: 'GN' }));
-        const tqAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulateTatkalAvail(i * 5 + ci, cls), quota: 'TQ' }));
-        const ptAvail = allClasses.map((cls, ci) => ({ class: cls, ...simulatePremTatkalAvail(i * 3 + ci, cls), quota: 'PT' }));
-        return { ...t, fromStation: from, toStation: to, gnAvail, tqAvail, ptAvail };
+        const simFn = selectedQuota === 'TQ' ? simulateTatkalAvail : selectedQuota === 'PT' ? simulatePremTatkalAvail : simulateAvailability;
+        const simArgs = selectedQuota === 'GN' ? [i * 7, selectedClass, from, to] : [i * 5, selectedClass];
+        const entry = { class: selectedClass, ...simFn(...simArgs), quota: selectedQuota };
+        return {
+          ...t, fromStation: from, toStation: to,
+          gnAvail: selectedQuota === 'GN' ? [entry] : [],
+          tqAvail: selectedQuota === 'TQ' ? [entry] : [],
+          ptAvail: selectedQuota === 'PT' ? [entry] : [],
+        };
       });
     } else {
       // ─── LIVE MODE ───
@@ -1345,67 +1571,32 @@ async function searchTrains() {
       const allClasses = ['SL','3A','2A','1A','CC'];
       const dmy = date; // v2 API expects ISO format YYYY-MM-DD
 
-      // Pre-fetch valid classes per train using GetTrainClasses endpoint
-      // This avoids wasting quota on classes a train doesn't support (which return N/A anyway)
-      const trainClassMap = {};
-      await Promise.all(trains.map(async tr => {
-        try {
-          const tc = await apiCall('/api/v1/getTrainClasses', { trainNo: tr.trainNo });
-          // Response: { data: { classes: ['SL','3A',...] } } or similar
-          const classes = tc?.data?.classes || tc?.data?.classList || tc?.data;
-          if (Array.isArray(classes) && classes.length) {
-            trainClassMap[tr.trainNo] = classes.map(c => String(c).trim().toUpperCase()).filter(c => allClasses.includes(c));
-          }
-        } catch { /* fallback: query all classes */ }
-      }));
-
-      // Fetch GN, TQ, PT availability in parallel per train
+      // MINIMAL API MODE: Only fetch the one class the user has selected, GN quota only.
+      // TQ and PT are loaded on-demand via the "Load Tatkal & PT" button per card.
+      // This reduces calls from (N trains × 3 quotas × 5 classes) down to (N trains × 1).
       for (let ti = 0; ti < trains.length; ti++) {
         const tr = trains[ti];
-        // Use only the classes this train actually has; fall back to all if lookup failed
-        const trainClasses = (trainClassMap[tr.trainNo]?.length) ? trainClassMap[tr.trainNo] : allClasses;
         setLoaderStep('ls', 2, `Availability: train ${ti+1}/${trains.length}…`);
-
-        const [gnResults, tqResults, ptResults] = await Promise.all([
-          // General quota
-          Promise.all(trainClasses.map(async cls => {
-            try {
-              const av = await apiCall('/api/v2/checkSeatAvailability', {
-                classType: cls, fromStationCode: tr.fromStation, quota: 'GN',
-                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
-              });
-              const parsed = parseV2Response(av, cls, dmy);
-              return { class: cls, ...parsed, quota: 'GN' };
-            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'GN' }; }
-          })),
-          // Tatkal quota
-          Promise.all(trainClasses.map(async cls => {
-            try {
-              const av = await apiCall('/api/v2/checkSeatAvailability', {
-                classType: cls, fromStationCode: tr.fromStation, quota: 'TQ',
-                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
-              });
-              const parsed = parseV2Response(av, cls, dmy);
-              return { class: cls, ...parsed, quota: 'TQ' };
-            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'TQ' }; }
-          })),
-          // Premium Tatkal
-          Promise.all(trainClasses.map(async cls => {
-            try {
-              const av = await apiCall('/api/v2/checkSeatAvailability', {
-                classType: cls, fromStationCode: tr.fromStation, quota: 'PT',
-                toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
-              });
-              const parsed = parseV2Response(av, cls, dmy);
-              return { class: cls, ...parsed, quota: 'PT' };
-            } catch(e) { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: 'PT' }; }
-          }))
-        ]);
-
-        tr.gnAvail = gnResults;
-        tr.tqAvail = tqResults;
-        tr.ptAvail = ptResults;
-        await sleep(300); // rate limit buffer
+        try {
+          const av = await apiCall('/api/v2/checkSeatAvailability', {
+            classType: selectedClass, fromStationCode: tr.fromStation, quota: selectedQuota,
+            toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
+          });
+          const parsed = parseV2Response(av, selectedClass, dmy);
+          const entry = { class: selectedClass, ...parsed, quota: selectedQuota };
+          tr.gnAvail = selectedQuota === 'GN' ? [entry] : [];
+          tr.tqAvail = selectedQuota === 'TQ' ? [entry] : [];
+          tr.ptAvail = selectedQuota === 'PT' ? [entry] : [];
+        } catch(e) {
+          const entry = { class: selectedClass, status: 'N/A', fare: null, apiCp: null, quota: selectedQuota };
+          tr.gnAvail = selectedQuota === 'GN' ? [entry] : [];
+          tr.tqAvail = selectedQuota === 'TQ' ? [entry] : [];
+          tr.ptAvail = selectedQuota === 'PT' ? [entry] : [];
+        }
+        tr.tqAvail = [];
+        tr.ptAvail = [];
+        tr._availLoaded = false; // flag: other classes + TQ/PT not yet loaded
+        await sleep(200); // rate limit buffer
       }
     }
 
@@ -1424,6 +1615,47 @@ async function searchTrains() {
   } finally {
     document.getElementById('search-loader').classList.remove('visible');
     stopLoaderElapsed('search');
+  }
+}
+
+// Load all classes for the selected quota for a single train card on demand
+async function loadFullAvailability(trainIdx) {
+  const btn = document.getElementById(`load-avail-btn-${trainIdx}`);
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+
+  const tr = _lastTrains[trainIdx];
+  const allClasses = ['SL','3A','2A','1A','CC'];
+  const dmy = _lastDate;
+
+  try {
+    // Fetch all 5 classes for the currently selected quota only (5 API calls)
+    const results = await Promise.all(allClasses.map(async cls => {
+      try {
+        const av = await apiCall('/api/v2/checkSeatAvailability', {
+          classType: cls, fromStationCode: tr.fromStation, quota: selectedQuota,
+          toStationCode: tr.toStation, trainNo: tr.trainNo, date: dmy
+        });
+        const parsed = parseV2Response(av, cls, dmy);
+        return { class: cls, ...parsed, quota: selectedQuota };
+      } catch { return { class: cls, status: 'N/A', fare: null, apiCp: null, quota: selectedQuota }; }
+    }));
+
+    if (selectedQuota === 'GN') tr.gnAvail = results;
+    else if (selectedQuota === 'TQ') tr.tqAvail = results;
+    else if (selectedQuota === 'PT') tr.ptAvail = results;
+    tr._availLoaded = true;
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '⟳ Retry';
+    return;
+  }
+
+  // Re-render just this card
+  const card = document.getElementById(`train-card-${trainIdx}`);
+  if (card) {
+    card.outerHTML = renderSingleTrainCard(tr, trainIdx, daysUntil(_lastDate));
   }
 }
 
@@ -1480,173 +1712,125 @@ function renderTrainResults(trains, date, from, to) {
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${selectedClass} · ${selectedQuota === 'GN' ? 'General' : selectedQuota === 'TQ' ? 'Tatkal' : 'Premium Tatkal'}</span>
   </div>`;
 
-  const geminiJobs = [];
-
   trains.forEach((tr, i) => {
-    const gnSet = tr.gnAvail || [];
-    const tqSet = tr.tqAvail || [];
-    const ptSet = tr.ptAvail || [];
-
-    const selGn = gnSet.find(a => a.class === selectedClass) || { status: 'N/A' };
-    const selTq = tqSet.find(a => a.class === selectedClass) || { status: 'N/A' };
-    const selPt = ptSet.find(a => a.class === selectedClass) || { status: 'N/A' };
-
-    const selQt = parseWLType(selGn.status);
-    const selWp = parseWLPosition(selGn.status);
-    const selIsLive = selGn.apiCp != null;
-    const selProb = selIsLive ? selGn.apiCp / 100 : confirmationProbability(selQt, selWp, days, selectedClass, 'popular');
-    const selPct = Math.round(selProb * 100);
-    const selSrcTag = selIsLive
-      ? `<span style="font-family:var(--mono);font-size:9px;color:var(--teal);margin-left:6px;opacity:.9">IRCTC live</span>`
-      : `<span style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:6px;opacity:.7">model est.</span>`;
-
-    // Best class across all GN
-    const bestCls = gnSet
-      .filter(a => a.status !== 'N/A')
-      .map(a => {
-        const qt = parseWLType(a.status);
-        const wp = parseWLPosition(a.status);
-        return { ...a, prob: confirmationProbability(qt, wp, days, a.class, 'popular') };
-      })
-      .sort((a,b) => b.prob - a.prob)[0];
-
-    // GN class chips
-    const gnChips = allClasses.map(cls => {
-      const a = gnSet.find(x => x.class === cls) || { status: 'N/A' };
-      return renderChip(cls, a.status, days, i === 0 && cls === selectedClass ? 'highlight' : '', '', a.fare, a.apiCp);
-    }).join('');
-
-    // TQ chips (only show if any have availability)
-    const tqHasAny = tqSet.some(a => a.status !== 'N/A' && !a.status.includes('N/A'));
-    const tqChips = tqHasAny ? allClasses.map(cls => {
-      const a = tqSet.find(x => x.class === cls) || { status: 'N/A' };
-      return renderChip(cls, a.status, 1, '', 'TQ', a.fare, a.apiCp);
-    }).join('') : '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">No Tatkal availability for this train</span>';
-
-    const ptHasAny = ptSet.some(a => a.status !== 'N/A' && !a.status.includes('N/A'));
-    const ptChips = ptHasAny ? allClasses.map(cls => {
-      const a = ptSet.find(x => x.class === cls) || { status: 'N/A' };
-      return renderChip(cls, a.status, 1, '', 'PT', a.fare, a.apiCp);
-    }).join('') : '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">No Premium Tatkal availability</span>';
-
-    // Confirmation bar for selected class GN
-    let confirmSection = '';
-    if (selQt && selQt !== 'CNF' && selQt !== 'RAC') {
-      confirmSection = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:180px;">
-            <div class="confirm-bar-wrap">
-              <div class="confirm-label-small">${selectedClass} GN confirmation${selSrcTag}</div>
-              <div class="confirm-bar-bg"><div class="confirm-bar-fill" style="width:${selPct}%;background:${probColor(selProb)};"></div></div>
-              <div class="confirm-pct" style="color:${probColor(selProb)}">${probLabel(selProb)} ${selPct}%</div>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            ${quotaBadge(selQt)}
-            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">WL ${selWp || '?'} · ${days}d out</span>
-            ${bestCls && bestCls.class !== selectedClass && parseWLType(bestCls.status) === 'CNF'
-              ? `<span class="badge badge-purple"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:3px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>${bestCls.class} confirmed</span>` : ''}
-          </div>
-        </div>
-      </div>`;
-    } else if (selQt === 'CNF') {
-      const seats = selGn.status.match(/\d+/);
-      confirmSection = `<div style="margin-top:10px;"><span class="badge badge-green" style="font-size:12px;padding:5px 12px;">&#10003; ${selectedClass} — ${seats ? seats[0]+' confirmed seats' : 'Confirmed seats available'}</span>${selTq.status !== 'N/A' && parseWLType(selTq.status) === 'CNF' ? ` <span class="badge badge-amber" style="font-size:12px;padding:5px 12px;">TQ also available</span>` : ''}</div>`;
-    } else if (selQt === 'RAC') {
-      confirmSection = `<div style="margin-top:10px;"><span class="badge badge-blue" style="font-size:12px;padding:5px 12px;">≈ RAC — travel guaranteed, likely upgrades to berth</span></div>`;
-    }
-
-    // Insight
-    let insight = '';
-    const cardId = `tc-${i}`;
-    if (selQt && selQt !== 'CNF' && selQt !== 'RAC' && selQt !== 'TQWL') {
-      if (GEMINI_KEY) {
-        insight = geminiSpinner(cardId, 'Gemini analyzing your booking…');
-        geminiJobs.push({ cardId, quotaType: selQt, wlPosition: selWp, daysOut: days, cls: selectedClass });
-      } else {
-        if (selQt === 'PQWL') {
-          insight = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>PQWL tip:</strong> Intermediate quota — pools with many stops. Consider booking to the terminal station for GNWL (cost: ~₹150–250 extra). Confirmation odds roughly double. Use Split Journey Finder.</span></div>`;
-        } else if (selQt === 'RLWL' && selWp > 5) {
-          insight = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>RLWL risk:</strong> Remote location quota only clears from same-station cancellations — extremely rare. If RLWL &gt; 5, consider an alternative route or Tatkal.</span></div>`;
-        } else if (selQt === 'GNWL' && selWp <= 20) {
-          insight = `<div class="insight-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="insight-text"><strong>Good position:</strong> GNWL ${selWp} with ${days} days out. Peak cancellations at T-72h and T-24h. Check status at those windows — movement expected.</span></div>`;
-        } else if (selQt === 'GNWL' && selWp > 50) {
-          insight = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="warn-text"><strong>High WL position:</strong> GNWL ${selWp} is risky. Check if other trains on this route have better availability, or consider Tatkal.</span></div>`;
-        }
-      }
-    } else if (selQt === 'TQWL') {
-      insight = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span><span class="danger-text"><strong>Tatkal WL:</strong> TQWL almost never confirms. Consider General quota WL or a different train/route.</span></div>`;
-    }
-
-    html += `<div class="train-card" style="animation-delay:${i*50}ms">
-      <div class="train-top">
-        <div class="train-name-row">
-          <div class="train-name">${tr.trainName}</div>
-          <div class="train-meta">${tr.trainNo} · ${tr.days || 'Daily'} · ${tr.fromStation} → ${tr.toStation}</div>
-        </div>
-        <div class="train-timing">
-          <div class="timing-group">
-            <div class="timing-time">${tr.dep || '--'}</div>
-            <div class="timing-station">${tr.fromStation}</div>
-          </div>
-          <div class="timing-arrow">
-            <div class="timing-duration">${tr.duration || ''}</div>
-            <div class="timing-line"></div>
-          </div>
-          <div class="timing-group">
-            <div class="timing-time">${tr.arr || '--'}</div>
-            <div class="timing-station">${tr.toStation}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="avail-quota-row">
-        <div class="avail-quota-title">General Quota (GN)</div>
-        <div class="avail-chips">${gnChips}</div>
-      </div>
-
-      <div class="avail-quota-row">
-        <div class="avail-quota-title tatkal"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Tatkal (TQ) — opens 1 day before departure</div>
-        <div class="avail-chips">${tqChips}</div>
-      </div>
-
-      <div class="avail-quota-row">
-        <div class="avail-quota-title pt" style="color:var(--red);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Premium Tatkal (PT) — dynamic pricing</div>
-        <div class="avail-chips">${ptChips}</div>
-      </div>
-
-      ${confirmSection}
-      ${insight}
-    </div>`;
+    html += renderSingleTrainCard(tr, i, days);
   });
 
   results.innerHTML = html;
 
-  // Fire Gemini jobs
-  const seen = new Set();
-  geminiJobs.forEach(job => {
-    const key = `${job.quotaType}_${Math.round((job.wlPosition||0)/5)*5}_${Math.round(job.daysOut/3)*3}_${job.cls}`;
-    const el = document.getElementById(job.cardId);
-    if (!seen.has(key) && el) {
-      seen.add(key);
-      (async () => {
-        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', null);
-        if (el) el.outerHTML = renderGeminiAdvice(g) || '';
-      })();
-    } else if (el) {
-      setTimeout(async () => {
-        const g = await getGeminiAdvice(job.quotaType, job.wlPosition, job.daysOut, job.cls, 'popular', null);
-        const target = document.getElementById(job.cardId);
-        if (target) target.outerHTML = renderGeminiAdvice(g) || '';
-      }, 1200);
+  // Fire Gemini jobs for any cards with WL status
+  if (GEMINI_KEY) {
+    const seen = new Set();
+    trains.forEach((tr, i) => {
+      const gnSet = tr.gnAvail || [];
+      const selGn = gnSet.find(a => a.class === selectedClass) || { status: 'N/A' };
+      const selQt = parseWLType(selGn.status);
+      const selWp = parseWLPosition(selGn.status);
+      if (!selQt || selGn.status === '—' || selQt === 'CNF' || selQt === 'RAC' || selQt === 'TQWL') return;
+      const cardId = `tc-${i}`;
+      const key = `${selQt}_${Math.round((selWp||0)/5)*5}_${Math.round(daysUntil(_lastDate||'')/3)*3}_${selectedClass}`;
+      const el = document.getElementById(cardId);
+      if (!seen.has(key) && el) {
+        seen.add(key);
+        (async () => {
+          const g = await getGeminiAdvice(selQt, selWp, daysUntil(_lastDate||''), selectedClass, 'popular', null);
+          const t = document.getElementById(cardId);
+          if (t) t.outerHTML = renderGeminiAdvice(g) || '';
+        })();
+      }
+    });
+  }
+}
+
+function renderSingleTrainCard(tr, i, days) {
+  // Pick exactly the one result we fetched: selectedClass + selectedQuota
+  const allSets = { GN: tr.gnAvail || [], TQ: tr.tqAvail || [], PT: tr.ptAvail || [] };
+  const activeSet = allSets[selectedQuota] || allSets['GN'];
+  const entry = activeSet.find(a => a.class === selectedClass) || { status: 'N/A', fare: null, apiCp: null };
+
+  const qt = parseWLType(entry.status);
+  const wp = parseWLPosition(entry.status);
+  const isLiveProb = entry.apiCp != null;
+  const prob = isLiveProb ? entry.apiCp / 100 : confirmationProbability(qt, wp, days, selectedClass, 'popular');
+  const pct = Math.round(prob * 100);
+
+  const quotaLabel = selectedQuota === 'TQ' ? 'Tatkal' : selectedQuota === 'PT' ? 'Premium Tatkal' : 'General';
+  const srcTag = isLiveProb
+    ? `<span style="font-family:var(--mono);font-size:9px;color:var(--teal);opacity:.9;margin-left:5px">IRCTC live</span>`
+    : `<span style="font-family:var(--mono);font-size:9px;color:var(--text3);opacity:.7;margin-left:5px">model est.</span>`;
+
+  // Availability pill
+  let availHtml = '';
+  if (entry.status === 'N/A' || !qt) {
+    availHtml = `<span class="badge badge-red" style="font-size:13px;padding:6px 14px;">Not Available</span>`;
+  } else if (qt === 'CNF') {
+    const seats = entry.status.match(/\d+/);
+    availHtml = `<span class="badge badge-green" style="font-size:13px;padding:6px 14px;">&#10003; ${seats ? seats[0]+' seats' : 'Confirmed'}</span>`;
+  } else if (qt === 'RAC') {
+    availHtml = `<span class="badge badge-blue" style="font-size:13px;padding:6px 14px;">RAC — travel guaranteed</span>`;
+  } else {
+    // Waitlist with probability bar
+    availHtml = `
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div>
+          ${quotaBadge(qt)}
+          <span style="font-family:var(--mono);font-size:14px;font-weight:500;color:${probColor(prob)};margin-left:8px">${entry.status}</span>
+          ${entry.fare ? `<span style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-left:10px">₹${entry.fare}</span>` : ''}
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <div class="confirm-bar-wrap">
+            <div class="confirm-label-small">Confirmation probability${srcTag}</div>
+            <div class="confirm-bar-bg"><div class="confirm-bar-fill" style="width:${pct}%;background:${probColor(prob)};"></div></div>
+            <div class="confirm-pct" style="color:${probColor(prob)}">${probLabel(prob)} ${pct}%</div>
+          </div>
+        </div>
+      </div>`;
+  }
+  if (entry.fare && (qt === 'CNF' || qt === 'RAC')) {
+    availHtml += `<span style="font-family:var(--mono);font-size:12px;color:var(--text3);margin-left:8px">₹${entry.fare}</span>`;
+  }
+
+  // Insight strip
+  const cardId = `tc-${i}`;
+  let insight = '';
+  if (qt && qt !== 'CNF' && qt !== 'RAC' && qt !== 'TQWL') {
+    if (GEMINI_KEY) {
+      insight = geminiSpinner(cardId, 'Gemini analyzing…');
+    } else {
+      if (qt === 'PQWL') insight = `<div class="warn-strip"><span class="insight-icon">ℹ</span><span class="warn-text"><strong>PQWL tip:</strong> Book to terminal for GNWL (~₹150–250 extra). Confirmation odds roughly double.</span></div>`;
+      else if (qt === 'RLWL' && wp > 5) insight = `<div class="danger-strip"><span class="insight-icon">⚠</span><span class="danger-text"><strong>RLWL risk:</strong> Only clears from same-station cancellations. If &gt; RLWL 5, consider Tatkal.</span></div>`;
+      else if (qt === 'GNWL' && wp <= 20) insight = `<div class="insight-strip"><span class="insight-icon">✓</span><span class="insight-text"><strong>Good position:</strong> GNWL ${wp} — peak cancellations at T-72h and T-24h.</span></div>`;
+      else if (qt === 'GNWL' && wp > 50) insight = `<div class="warn-strip"><span class="insight-icon">⚠</span><span class="warn-text"><strong>High WL:</strong> GNWL ${wp} — consider Tatkal or a different train.</span></div>`;
     }
-  });
+  } else if (qt === 'TQWL') {
+    insight = `<div class="danger-strip"><span class="insight-icon">✕</span><span class="danger-text"><strong>Tatkal WL:</strong> TQWL almost never confirms. Switch to General quota or a different train.</span></div>`;
+  }
+
+  return `<div class="train-card" id="train-card-${i}" style="animation-delay:${i*50}ms">
+    <div class="train-top">
+      <div class="train-name-row">
+        <div class="train-name">${tr.trainName}</div>
+        <div class="train-meta">${tr.trainNo} · ${tr.days || 'Daily'} · ${tr.fromStation} → ${tr.toStation}</div>
+      </div>
+      <div class="train-timing">
+        <div class="timing-group"><div class="timing-time">${tr.dep || '--'}</div><div class="timing-station">${tr.fromStation}</div></div>
+        <div class="timing-arrow"><div class="timing-duration">${tr.duration || ''}</div><div class="timing-line"></div></div>
+        <div class="timing-group"><div class="timing-time">${tr.arr || '--'}</div><div class="timing-station">${tr.toStation}</div></div>
+      </div>
+    </div>
+    <div style="margin-top:4px;margin-bottom:10px;">
+      <span style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">${selectedClass} · ${quotaLabel}</span>
+    </div>
+    <div style="padding:12px 0;border-top:1px solid var(--border);">
+      ${availHtml}
+    </div>
+    ${insight}
+  </div>`;
 }
 
 function renderChip(cls, status, days, extra, quotaLabel, fare, apiCp) {
   const qt = parseWLType(status);
   const wp = parseWLPosition(status);
-  // Prefer the API's own CP% (from IRCTC data) over our local model
   const isLive = apiCp != null;
   const prob = isLive ? apiCp / 100 : confirmationProbability(qt, wp, days, cls, 'popular');
   const pct = Math.round(prob * 100);
@@ -2944,6 +3128,442 @@ const pnrLoaderCtrl = createLoaderController({
   barId: 'pnr-loader-bar', msgId: 'pnr-loader-msg', elapsedId: 'pnr-loader-elapsed',
 });
 
+const saTrainLoaderCtrl = createLoaderController({
+  loaderId: 'sa-train-loader',
+  steps: [{id:'satl-1'},{id:'satl-2'}],
+  barId: 'sa-train-loader-bar', msgId: 'sa-train-loader-msg', elapsedId: 'sa-train-loader-elapsed',
+});
+
+const saSegLoaderCtrl = createLoaderController({
+  loaderId: 'sa-seg-loader',
+  steps: [{id:'sasl-1'},{id:'sasl-2'},{id:'sasl-3'}],
+  barId: 'sa-seg-loader-bar', msgId: 'sa-seg-loader-msg', elapsedId: 'sa-seg-loader-elapsed',
+});
+
+// ═══════════════════════════════════════════
+//  SEGMENT AVAILABILITY
+// ═══════════════════════════════════════════
+let saSelectedClass = '3A';
+let saSelectedQuota = 'GN';
+let saFoundTrains = [];      // list of trains from step 1
+let saCurrentTrain = null;   // train selected in step 2
+let saSegmentData = [];      // [{from, fromName, to, toName, status, fare, apiCp, prob}]
+let saSearchDate = '';
+let saFromCode = '', saToCode = '';
+
+function saSelectClass(el, cls) {
+  document.querySelectorAll('#sa-class-tabs .class-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  saSelectedClass = cls;
+}
+
+function saSelectQuota(el, q) {
+  document.querySelectorAll('#sa-quota-tabs .quota-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  saSelectedQuota = q;
+}
+
+async function saSearchTrains() {
+  const from = document.getElementById('sa-from').value.trim().toUpperCase();
+  const to   = document.getElementById('sa-to').value.trim().toUpperCase();
+  const date = document.getElementById('sa-date').value;
+  if (!from || !to || !date) {
+    document.getElementById('sa-train-error').textContent = 'Please fill in From, To, and Date.';
+    document.getElementById('sa-train-error').style.display = 'block'; return;
+  }
+  saFromCode = from; saToCode = to; saSearchDate = date;
+  document.getElementById('sa-train-error').style.display = 'none';
+  document.getElementById('sa-train-results').innerHTML = '';
+  document.getElementById('sa-step1').style.display = '';
+  document.getElementById('sa-step2').style.display = 'none';
+  document.getElementById('sa-train-loader').classList.add('visible');
+  saTrainLoaderCtrl.start();
+  startLoaderElapsed('sa-train');
+
+  try {
+    let trains = [];
+    if (!API_KEY) {
+      await sleep(600);
+      trains = getDemoTrains(from, to).map(t => ({
+        trainNo: t.trainNo, trainName: t.trainName,
+        fromStation: from, toStation: to,
+        dep: t.dep, arr: t.arr, duration: t.duration, days: t.days
+      }));
+    } else {
+      saTrainLoaderCtrl.advanceStep(0, 'Fetching trains');
+      const data = await apiCall('/api/v3/trainBetweenStations', {
+        fromStationCode: from, toStationCode: to, dateOfJourney: fmtDate(date)
+      });
+      trains = (data?.data || []).map(t => ({
+        trainNo: t.train_number || t.trainNo,
+        trainName: t.train_name || t.trainName || 'Train',
+        fromStation: t.from_station_code || t.from || from,
+        toStation:   t.to_station_code   || t.to   || to,
+        dep: t.from_std || t.departureTime || '--:--',
+        arr: t.to_std   || t.arrivalTime   || '--:--',
+        duration: t.duration || '--',
+        days: formatRunDays(t.run_days || t.runningDays)
+      }));
+    }
+    saTrainLoaderCtrl.advanceStep(1, 'Done');
+    saTrainLoaderCtrl.finish();
+    document.getElementById('sa-train-loader').classList.remove('visible');
+
+    saFoundTrains = trains;
+    if (!trains.length) {
+      document.getElementById('sa-train-results').innerHTML = emptyState('No trains found', 'Try different stations or date.');
+      return;
+    }
+    renderSaTrainList(trains);
+  } catch(e) {
+    saTrainLoaderCtrl.hide();
+    document.getElementById('sa-train-error').textContent = 'Error: ' + e.message;
+    document.getElementById('sa-train-error').style.display = 'block';
+  }
+}
+
+function renderSaTrainList(trains) {
+  const days = daysUntil(saSearchDate);
+  let html = `<div class="results-header">
+    <div class="results-count"><span class="live-dot"></span>${trains.length} train${trains.length > 1 ? 's' : ''} found · click to analyse segments</div>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3);">${saFromCode} → ${saToCode}</span>
+  </div>`;
+  trains.forEach((tr, i) => {
+    html += `<div class="train-card" id="sa-tr-${i}" style="cursor:pointer;animation-delay:${i*50}ms" onclick="saPickTrain(${i})">
+      <div class="train-top">
+        <div class="train-name-row">
+          <div class="train-name">${tr.trainName}</div>
+          <div class="train-meta">${tr.trainNo} · ${tr.days || 'Daily'} · ${tr.fromStation} → ${tr.toStation}</div>
+        </div>
+        <div class="train-timing">
+          <div class="timing-group"><div class="timing-time">${tr.dep || '--'}</div><div class="timing-station">${tr.fromStation}</div></div>
+          <div class="timing-arrow"><div class="timing-duration">${tr.duration || ''}</div><div class="timing-line"></div></div>
+          <div class="timing-group"><div class="timing-time">${tr.arr || '--'}</div><div class="timing-station">${tr.toStation}</div></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">Click to see segment-wise availability →</span>
+        <span class="badge badge-blue" style="margin-left:auto;">${saSelectedClass} · ${saSelectedQuota}</span>
+      </div>
+    </div>`;
+  });
+  document.getElementById('sa-train-results').innerHTML = html;
+}
+
+async function saPickTrain(idx) {
+  saCurrentTrain = saFoundTrains[idx];
+  document.getElementById('sa-step1').style.display = 'none';
+  document.getElementById('sa-step2').style.display = '';
+  document.getElementById('sa-selected-train-label').textContent =
+    `${saCurrentTrain.trainNo} · ${saCurrentTrain.trainName} · ${saCurrentTrain.dep} → ${saCurrentTrain.arr} · ${saSelectedClass} · ${saSelectedQuota}`;
+  document.getElementById('sa-seg-error').style.display = 'none';
+  document.getElementById('sa-seg-results').innerHTML = '';
+  document.getElementById('sa-seg-loader').classList.add('visible');
+  saSegLoaderCtrl.start();
+  startLoaderElapsed('sa-seg');
+
+  try {
+    // Step 1: Get intermediate stations
+    saSegLoaderCtrl.advanceStep(0, 'Fetching route');
+    let stops = [];
+    if (!API_KEY) {
+      await sleep(500);
+      stops = saGenerateDemoStops(saCurrentTrain.trainNo, saCurrentTrain.fromStation, saCurrentTrain.toStation);
+    } else {
+      try {
+        // Endpoint: /api/v1/getTrainSchedule — response shape confirmed from live API:
+        // { status:true, data: { route: [ {station_code, station_name, stop, sta, std_min, day, ...} ] } }
+        const rData = await apiCall('/api/v1/getTrainSchedule', { trainNo: saCurrentTrain.trainNo });
+
+        // Extract the route array — handle all known shapes
+        let rawRoute = [];
+        if (Array.isArray(rData?.data?.route)) {
+          rawRoute = rData.data.route;                        // ← confirmed shape
+        } else if (Array.isArray(rData?.data)) {
+          rawRoute = rData.data;
+        } else if (Array.isArray(rData?.data?.stationList)) {
+          rawRoute = rData.data.stationList;
+        } else if (Array.isArray(rData?.route)) {
+          rawRoute = rData.route;
+        }
+        if (!rawRoute.length) throw new Error('Empty schedule response');
+
+        // Convert minutes-since-midnight (sta/std_min) to HH:MM string
+        function minsToHHMM(m) {
+          if (m == null || m < 0) return '--';
+          const mm = m % 1440; // handle >24h trains
+          return String(Math.floor(mm / 60)).padStart(2,'0') + ':' + String(mm % 60).padStart(2,'0');
+        }
+
+        // Keep only HALTING stations (stop:true) — skip non-stop waypoints (cabins, block huts etc.)
+        // Also always include the first and last station regardless of stop flag.
+        const haltingOnly = rawRoute.filter((s, i) =>
+          s.stop === true || i === 0 || i === rawRoute.length - 1
+        );
+
+        const normStops = haltingOnly.map(s => ({
+          code: (s.station_code || s.stationCode || '').toUpperCase(),
+          name: s.station_name  || s.stationName  || s.station_code || '',
+          arr:  minsToHHMM(s.sta   ?? s.sta_min   ?? null),
+          dep:  minsToHHMM(s.std_min ?? s.std     ?? null),
+          day:  s.day || s.d_day || 1,
+        })).filter(s => s.code);
+
+        // Slice between user's boarding and alighting station
+        const fromIdx = normStops.findIndex(s => s.code === saCurrentTrain.fromStation.toUpperCase());
+        const toIdx   = normStops.findIndex(s => s.code === saCurrentTrain.toStation.toUpperCase());
+        const startI  = fromIdx >= 0 ? fromIdx : 0;
+        const endI    = toIdx   >= 0 ? toIdx   : normStops.length - 1;
+        stops = normStops.slice(startI, endI + 1);
+      } catch(e) {
+        // If schedule API fails for any reason, fall back to corridor-based demo stops
+        stops = saGenerateDemoStops(saCurrentTrain.trainNo, saCurrentTrain.fromStation, saCurrentTrain.toStation);
+      }
+    }
+
+    if (stops.length < 2) {
+      throw new Error('Could not resolve intermediate stations. Route API may not have data for this train.');
+    }
+
+    // Step 2: Batch availability for each consecutive segment pair
+    saSegLoaderCtrl.advanceStep(1, 'Checking availability');
+    const segments = [];
+    const total = stops.length - 1;
+
+    if (!API_KEY) {
+      await sleep(800);
+      for (let i = 0; i < total; i++) {
+        const s = stops[i], e = stops[i + 1];
+        const sim = simulateAvailability(i * 11 + saSelectedClass.charCodeAt(0), saSelectedClass, s.code, e.code);
+        const qt = parseWLType(sim.status);
+        const wp = parseWLPosition(sim.status);
+        const prob = confirmationProbability(qt, wp, daysUntil(saSearchDate), saSelectedClass, 'popular');
+        segments.push({ from: s.code, fromName: s.name, fromArr: s.arr, fromDep: s.dep,
+                        to: e.code, toName: e.name, toArr: e.arr, toDep: e.dep,
+                        status: sim.status, fare: null, apiCp: null, prob, qt, wp });
+      }
+    } else {
+      // Treat each consecutive stop pair as actual from/to — same pattern as Find Trains.
+      // checkSeatAvailability works fine with any two valid halt stations on the route.
+      const BATCH = 4;
+      for (let b = 0; b < total; b += BATCH) {
+        const chunk = [];
+        for (let i = b; i < Math.min(b + BATCH, total); i++) chunk.push(i);
+        saSegLoaderCtrl.advanceStep(1, `Segment ${b+1}–${Math.min(b+BATCH, total)} / ${total}`);
+        const results = await Promise.all(chunk.map(async (i) => {
+          const s = stops[i], e = stops[i + 1];
+          try {
+            const av = await apiCall('/api/v2/checkSeatAvailability', {
+              classType: saSelectedClass, fromStationCode: s.code, quota: saSelectedQuota,
+              toStationCode: e.code, trainNo: saCurrentTrain.trainNo, date: saSearchDate
+            });
+            const parsed = parseV2Response(av, saSelectedClass, saSearchDate);
+            const qt = parseWLType(parsed.status);
+            const wp = parseWLPosition(parsed.status);
+            const prob = parsed.apiCp != null ? parsed.apiCp / 100
+                       : confirmationProbability(qt, wp, daysUntil(saSearchDate), saSelectedClass, 'popular');
+            return { from: s.code, fromName: s.name, fromArr: s.arr, fromDep: s.dep,
+                     to: e.code, toName: e.name, toArr: e.arr, toDep: e.dep,
+                     status: parsed.status, fare: parsed.fare, apiCp: parsed.apiCp, prob, qt, wp };
+          } catch {
+            return { from: s.code, fromName: s.name, fromArr: s.arr, fromDep: s.dep,
+                     to: e.code, toName: e.name, toArr: e.arr, toDep: e.dep,
+                     status: 'N/A', fare: null, apiCp: null, prob: 0, qt: null, wp: null };
+          }
+        }));
+        segments.push(...results);
+        if (b + BATCH < total) await sleep(250);
+      }
+    }
+
+    saSegLoaderCtrl.advanceStep(2, 'Computing probabilities');
+    await sleep(100);
+    saSegLoaderCtrl.finish();
+    document.getElementById('sa-seg-loader').classList.remove('visible');
+
+    saSegmentData = segments;
+    renderSaSegmentTable(segments, stops);
+  } catch(e) {
+    saSegLoaderCtrl.hide();
+    document.getElementById('sa-seg-error').textContent = 'Error: ' + e.message;
+    document.getElementById('sa-seg-error').style.display = 'block';
+  }
+}
+
+function saGenerateDemoStops(trainNo, from, to) {
+  // Generate plausible intermediary stops based on corridor hubs
+  const hubs = corridorHubs(from, to);
+  const chain = [from, ...hubs.slice(0, 4), to];
+  const dedupedChain = [...new Set(chain)];
+  const times = ['06:00','08:30','11:15','13:45','16:20','19:00','21:30'];
+  return dedupedChain.map((code, i) => ({
+    code,
+    name: STATION_NAMES[code] || code,
+    arr: i === 0 ? '--' : times[i] || '--',
+    dep: i === dedupedChain.length - 1 ? '--' : times[i] || '--',
+    day: 1
+  }));
+}
+
+function renderSaSegmentTable(segments, stops) {
+  const tr = saCurrentTrain;
+  const days = daysUntil(saSearchDate);
+  const quotaLabel = saSelectedQuota === 'TQ' ? 'Tatkal' : saSelectedQuota === 'PT' ? 'Premium Tatkal' : 'General';
+
+  // Summary badge strip
+  const cnfCount  = segments.filter(s => s.qt === 'CNF').length;
+  const racCount  = segments.filter(s => s.qt === 'RAC').length;
+  const wlCount   = segments.filter(s => s.qt && s.qt !== 'CNF' && s.qt !== 'RAC').length;
+  const naCount   = segments.filter(s => !s.qt).length;
+
+  let html = `
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:18px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px;">${tr.trainName}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);">${tr.trainNo} · ${saSelectedClass} · ${quotaLabel} · ${saSearchDate}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        ${cnfCount  ? `<span class="badge badge-green">✓ ${cnfCount} CNF</span>` : ''}
+        ${racCount  ? `<span class="badge badge-blue">RAC ${racCount}</span>` : ''}
+        ${wlCount   ? `<span class="badge badge-amber">WL ${wlCount}</span>` : ''}
+        ${naCount   ? `<span class="badge badge-red">N/A ${naCount}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:640px;" id="sa-seg-table">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border2);">
+        <th style="text-align:left;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;">Segment</th>
+        <th style="text-align:left;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Timing</th>
+        <th style="text-align:left;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Status</th>
+        <th style="text-align:left;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Conf. Prob</th>
+        <th style="text-align:right;padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Fare</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  segments.forEach((seg, i) => {
+    const isFirst = seg.from === saFromCode;
+    const isLast  = seg.to   === saToCode;
+    const pct = Math.round((seg.prob || 0) * 100);
+    const isLiveProb = seg.apiCp != null;
+    const srcTag = isLiveProb
+      ? `<span style="font-family:var(--mono);font-size:9px;color:var(--teal);margin-left:4px">IRCTC</span>`
+      : `<span style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:4px">est.</span>`;
+
+    let statusCell = '';
+    if (!seg.qt) {
+      statusCell = `<span class="badge badge-red">N/A</span>`;
+    } else if (seg.qt === 'CNF') {
+      const seats = seg.status.match(/\d+/);
+      statusCell = `<span class="badge badge-green">✓ ${seats ? seats[0]+' seats' : 'Confirmed'}</span>`;
+    } else if (seg.qt === 'RAC') {
+      statusCell = `<span class="badge badge-blue">RAC — travel guaranteed</span>`;
+    } else {
+      statusCell = `${quotaBadge(seg.qt)}<span style="font-family:var(--mono);font-size:12px;font-weight:500;color:${probColor(seg.prob)};margin-left:8px">${seg.status}</span>`;
+    }
+
+    let probCell = '';
+    if (seg.qt) {
+      probCell = `<div style="display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;min-width:80px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${probColor(seg.prob)};border-radius:2px;transition:width .5s;"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:500;color:${probColor(seg.prob)};white-space:nowrap;">${probLabel(seg.prob)} ${pct}%${srcTag}</span>
+      </div>`;
+    } else {
+      probCell = `<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">—</span>`;
+    }
+
+    const rowBg = isFirst ? 'rgba(200,240,96,0.03)' : isLast ? 'rgba(64,208,160,0.03)' : '';
+    const fromDot = isFirst
+      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;flex-shrink:0;"></span>`
+      : `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border2);margin-right:6px;flex-shrink:0;"></span>`;
+    const toDot = isLast
+      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:6px;flex-shrink:0;"></span>`
+      : `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border2);margin-right:6px;flex-shrink:0;"></span>`;
+
+    html += `<tr style="border-bottom:1px solid var(--border);background:${rowBg};">
+      <td style="padding:12px 12px;">
+        <div style="display:flex;align-items:center;margin-bottom:4px;">${fromDot}<span style="font-weight:500;color:var(--text);font-size:12.5px;">${seg.fromName || seg.from}</span><span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:6px;">(${seg.from})</span></div>
+        <div style="display:flex;align-items:center;padding-left:4px;"><span style="width:1px;background:var(--border2);height:10px;margin-right:13px;flex-shrink:0;display:inline-block;"></span><span style="font-family:var(--mono);font-size:10px;color:var(--text3);">↓</span></div>
+        <div style="display:flex;align-items:center;margin-top:4px;">${toDot}<span style="font-weight:500;color:var(--text);font-size:12.5px;">${seg.toName || seg.to}</span><span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:6px;">(${seg.to})</span></div>
+      </td>
+      <td style="padding:12px 12px;font-family:var(--mono);font-size:11px;color:var(--text3);vertical-align:middle;white-space:nowrap;">
+        ${seg.fromDep && seg.fromDep !== '--' ? `<div>${seg.fromDep}</div>` : ''}
+        ${seg.toArr   && seg.toArr   !== '--' ? `<div style="margin-top:2px;">${seg.toArr}</div>` : ''}
+      </td>
+      <td style="padding:12px 12px;vertical-align:middle;">${statusCell}</td>
+      <td style="padding:12px 12px;vertical-align:middle;">${probCell}</td>
+      <td style="padding:12px 12px;text-align:right;vertical-align:middle;font-family:var(--mono);font-size:12px;color:var(--text3);">${seg.fare ? '₹'+seg.fare : '—'}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>
+
+  <div style="margin-top:14px;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.8;">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:4px;"></span>Your boarding · 
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:4px;margin-left:8px;"></span>Your destination · 
+    Conf. prob uses IRCTC data when available, statistical model otherwise.
+  </div>`;
+
+  document.getElementById('sa-seg-results').innerHTML = html;
+}
+
+function saBackToTrains() {
+  document.getElementById('sa-step2').style.display = 'none';
+  document.getElementById('sa-step1').style.display = '';
+}
+
+function saExportExcel() {
+  if (!saSegmentData.length) return;
+  const tr = saCurrentTrain;
+  const quotaLabel = saSelectedQuota === 'TQ' ? 'Tatkal' : saSelectedQuota === 'PT' ? 'Premium Tatkal' : 'General';
+
+  // Build CSV (Excel-compatible)
+  const headers = ['From Code','From Station','Dep','To Code','To Station','Arr','Status','Confirmation %','Source','Fare (INR)'];
+  const rows = saSegmentData.map(s => [
+    s.from,
+    s.fromName || s.from,
+    s.fromDep || '',
+    s.to,
+    s.toName || s.to,
+    s.toArr || '',
+    s.status || 'N/A',
+    s.qt ? Math.round((s.prob || 0) * 100) + '%' : '',
+    s.apiCp != null ? 'IRCTC Live' : (s.qt ? 'Model Est.' : ''),
+    s.fare ? s.fare : ''
+  ]);
+
+  const title = [
+    [`Train: ${tr.trainNo} - ${tr.trainName}`],
+    [`Route: ${saFromCode} → ${saToCode}`],
+    [`Date: ${saSearchDate} | Class: ${saSelectedClass} | Quota: ${quotaLabel}`],
+    [`Exported from RailRadar on ${new Date().toLocaleString('en-IN')}`],
+    []
+  ];
+
+  const csvRows = [
+    ...title.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')),
+    headers.map(h => `"${h}"`).join(','),
+    ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(','))
+  ];
+
+  const csvContent = '\uFEFF' + csvRows.join('\r\n'); // BOM for Excel UTF-8
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `RailRadar_${tr.trainNo}_${saFromCode}-${saToCode}_${saSearchDate}_${saSelectedClass}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
@@ -2951,7 +3571,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set default date to 7 days from now
   const d = new Date(); d.setDate(d.getDate() + 7);
   const iso = d.toISOString().split('T')[0];
-  ['s-date','r-date','sp-date'].forEach(id => {
+  ['s-date','r-date','sp-date','sa-date'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = iso; el.min = new Date().toISOString().split('T')[0]; }
   });
@@ -2987,6 +3607,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('r-to').value = 'MAS';
   document.getElementById('sp-from').value = 'SC';
   document.getElementById('sp-to').value = 'KPD';
+  document.getElementById('sa-from').value = 'NDLS';
+  document.getElementById('sa-to').value = 'BPL';
 });
 </script>
 </body>
