@@ -1,0 +1,19 @@
+{
+  "name": "railradar",
+  "version": "1.0.0",
+  "description": "RailRadar — Train Intelligence, private deployment",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "node-fetch": "^3.3.2"
+  }
+}

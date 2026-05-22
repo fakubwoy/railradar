@@ -647,7 +647,7 @@ select.field-input { cursor: pointer; }
 
   <div class="info-box" style="margin-top:16px;">
     <h3>Statistical model — not IRCTC data</h3>
-    <p>This predictor uses a statistical model, <strong style="color:var(--text)">not</strong> live IRCTC data. Base rates: GNWL ~72%, PQWL ~28%, RLWL ~18%, TQWL ~6%, RQWL ~4%. Adjusted for WL position (exponential decay), days to departure (cancellation windows at T-120h, T-72h, T-24h, T-4h), class (SL confirms fastest, 1A slowest), and route demand. For train-specific real probabilities from IRCTC, use <strong style="color:var(--text)">Find Trains</strong> — when the API returns a probability it's shown as <span style="color:var(--teal);font-family:var(--mono);font-size:11px">IRCTC</span> on each chip.</p>
+    <p>This predictor uses a statistical model, <strong style="color:var(--text)">not</strong> live IRCTC data. Base rates: GNWL ~72%, RLWL ~35%, PQWL ~22%, TQWL ~8%, RQWL ~4%. Adjusted for WL position (exponential decay), days to departure (cancellation windows at T-120h, T-72h, T-24h, T-4h), class (SL confirms fastest, 1A slowest), and route demand. For train-specific real probabilities from IRCTC, use <strong style="color:var(--text)">Find Trains</strong> — when the API returns a probability it's shown as <span style="color:var(--teal);font-family:var(--mono);font-size:11px">IRCTC</span> on each chip.</p>
   </div>
 </div>
 
@@ -668,7 +668,7 @@ select.field-input { cursor: pointer; }
       <tr><td style="color:var(--blue);font-family:var(--mono);">RAC</td><td>Reservation Against Cancellation</td><td>All CNF seats full</td><td><span class="badge badge-green">~92%</span></td><td>Always better than WL. Travel guaranteed (shared berth). Almost always upgrades to full berth.</td></tr>
       <tr><td style="color:var(--accent);font-family:var(--mono);">GNWL</td><td>General Waitlist</td><td>Origin or primary station booking</td><td><span class="badge badge-lime">~72% (pos &lt;30)</span></td><td>Best WL type. Clears from any cancellation on the train. Peak releases: T-72h and T-24h.</td></tr>
       <tr><td style="color:var(--amber);font-family:var(--mono);">PQWL</td><td>Pooled Quota Waitlist</td><td>Both board and deboard at intermediate stations</td><td><span class="badge badge-amber">~28%</span></td><td>Shared with many intermediate stops. <strong style="color:var(--text)">Book to terminal for GNWL instead</strong>. Extra cost ₹80–250.</td></tr>
-      <tr><td style="color:var(--orange);font-family:var(--mono);">RLWL</td><td>Remote Location Waitlist</td><td>Remote intermediate stations</td><td><span class="badge badge-amber">~18%</span></td><td>Only clears from same remote-station cancellations. If &gt; RLWL 5, book alternative now.</td></tr>
+      <tr><td style="color:var(--orange);font-family:var(--mono);">RLWL</td><td>Remote Location Waitlist</td><td>Remote intermediate stations</td><td><span class="badge badge-amber">~35%</span></td><td>Only clears from same remote-station cancellations. RLWL 1–5 confirms fairly well; 6–15 is moderate; above 15 is difficult.</td></tr>
       <tr><td style="color:var(--red);font-family:var(--mono);">TQWL</td><td>Tatkal Waitlist</td><td>Tatkal quota overflow</td><td><span class="badge badge-red">~6%</span></td><td>Almost never confirms. Book something else immediately.</td></tr>
       <tr><td style="color:var(--red);font-family:var(--mono);">RQWL</td><td>Request Waitlist</td><td>Intermediate→intermediate, no dedicated quota</td><td><span class="badge badge-red">~4%</span></td><td>Treat as unconfirmed. Use split journey finder.</td></tr>
     </tbody>
@@ -1086,7 +1086,8 @@ function getDemoTrains(from, to) {
 // ═══════════════════════════════════════════
 //  API LAYER
 // ═══════════════════════════════════════════
-const RAPIDAPI_HOST = 'irctc1.p.rapidapi.com';
+const RAPIDAPI_HOST     = 'irctc1.p.rapidapi.com';
+const PNR_API_HOST      = 'irctc-indian-railway-pnr-status.p.rapidapi.com';
 
 async function apiCall(endpoint, params, signal) {
   if (!API_KEY) throw new Error('NO_KEY');
@@ -1105,6 +1106,27 @@ async function apiCall(endpoint, params, signal) {
   if (json.status === false && !endpoint.includes('checkSeatAvailability')) {
     throw new Error(json.message || 'API returned status:false');
   }
+  return json;
+}
+
+// Dedicated call for the PNR Status API (different host + path-param style)
+async function pnrApiCall(pnrNumber, signal) {
+  if (!API_KEY) throw new Error('NO_KEY');
+  const url = `https://${PNR_API_HOST}/getPNRStatus/${encodeURIComponent(pnrNumber)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'x-rapidapi-key':  API_KEY,
+      'x-rapidapi-host': PNR_API_HOST
+    },
+    signal: signal || null
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`PNR API ${res.status}: ${errText.slice(0, 120)}`);
+  }
+  const json = await res.json();
+  if (json.success === false) throw new Error(json.message || 'PNR not found.');
   return json;
 }
 
@@ -1284,33 +1306,39 @@ function confirmationProbability(quotaType, wlPosition, daysOut, cls, routeType)
   if (quotaType === 'RAC') return 0.92;
   const pos = wlPosition || 0;
   const days = daysOut || 7;
-  const base = { GNWL: 0.72, PQWL: 0.28, RLWL: 0.18, TQWL: 0.06, RQWL: 0.04 };
+  // Base rates: RLWL > PQWL (RLWL has dedicated remote quota; PQWL is pooled among many stations)
+  // GNWL ~72% overall; RLWL ~35% overall; PQWL ~22%; TQWL ~8%; RQWL ~4%
+  const base = { GNWL: 0.72, PQWL: 0.22, RLWL: 0.35, TQWL: 0.08, RQWL: 0.04 };
   let prob = base[quotaType] || 0.05;
 
-  // Position decay
+  // Position decay — RLWL: positions 1-5 confirm readily; 6-15 moderate; 16+ difficult
   if (quotaType === 'GNWL') {
-    if (pos <= 5) prob *= 0.99;
-    else if (pos <= 10) prob *= 0.95;
-    else if (pos <= 20) prob *= 0.88;
-    else if (pos <= 35) prob *= 0.70;
-    else if (pos <= 50) prob *= 0.48;
-    else if (pos <= 80) prob *= 0.28;
+    if (pos <= 5)        prob *= 0.99;
+    else if (pos <= 10)  prob *= 0.95;
+    else if (pos <= 20)  prob *= 0.88;
+    else if (pos <= 35)  prob *= 0.70;
+    else if (pos <= 50)  prob *= 0.48;
+    else if (pos <= 80)  prob *= 0.28;
     else if (pos <= 120) prob *= 0.14;
-    else prob *= 0.06;
+    else                 prob *= 0.06;
   } else if (quotaType === 'PQWL') {
-    if (pos <= 3) prob *= 0.85;
-    else if (pos <= 7) prob *= 0.65;
-    else if (pos <= 15) prob *= 0.40;
-    else if (pos <= 25) prob *= 0.20;
-    else prob *= 0.08;
+    if (pos <= 3)        prob *= 0.85;
+    else if (pos <= 7)   prob *= 0.60;
+    else if (pos <= 15)  prob *= 0.35;
+    else if (pos <= 25)  prob *= 0.15;
+    else                 prob *= 0.06;
   } else if (quotaType === 'RLWL') {
-    if (pos <= 3) prob *= 0.85;
-    else if (pos <= 5) prob *= 0.60;
-    else if (pos <= 10) prob *= 0.30;
-    else prob *= 0.08;
+    // RLWL 1: ~75%, 2: ~65%, 3-5: ~55%, 6-10: ~35%, 11-20: ~18%, 20+: ~8%
+    if (pos <= 1)        prob *= 0.95;  // → ~33% at pos 1 before time/class mult → ~75% after
+    else if (pos <= 2)   prob *= 0.82;
+    else if (pos <= 5)   prob *= 0.65;
+    else if (pos <= 10)  prob *= 0.42;
+    else if (pos <= 20)  prob *= 0.22;
+    else if (pos <= 35)  prob *= 0.12;
+    else                 prob *= 0.06;
   } else if (quotaType === 'TQWL') {
-    if (pos <= 2) prob *= 0.70;
-    else prob *= 0.20;
+    if (pos <= 2)  prob *= 0.70;
+    else           prob *= 0.20;
   }
 
   // Time factor — cancellation windows
@@ -2577,6 +2605,45 @@ function demoPNR(pnr) {
 }
 
 function normalizePNR(d, pnr) {
+  // Actual response shape from irctc-indian-railway-pnr-status API:
+  // { pnrNumber, trainNumber, trainName, sourceStation, destinationStation,
+  //   boardingPoint, reservationUpto, journeyClass, quota, chartStatus,
+  //   dateOfJourney, arrivalDate, bookingFare, ticketFare,
+  //   passengerList: [{ passengerSerialNumber, bookingStatusDetails,
+  //     currentStatusDetails, currentCoachId, currentBerthNo, ... }] }
+  if (d.passengerList || d.trainNumber || d.journeyClass) {
+    const chartRaw = d.chartStatus || '';
+    const chartPrepared = chartRaw.toLowerCase().includes('prepared') && !chartRaw.toLowerCase().includes('not');
+    return {
+      pnrNumber:          d.pnrNumber || pnr,
+      trainNo:            d.trainNumber,
+      trainName:          d.trainName,
+      journeyDate:        d.dateOfJourney ? new Date(d.dateOfJourney).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : null,
+      boardingStation:    d.boardingPoint   || d.sourceStation,
+      destinationStation: d.reservationUpto || d.destinationStation,
+      fromCode:           d.boardingPoint   || d.sourceStation,
+      toCode:             d.reservationUpto || d.destinationStation,
+      class:              d.journeyClass,
+      quota:              d.quota,
+      chartStatus:        chartPrepared ? 'CHART PREPARED' : 'CHART NOT PREPARED',
+      departureTime:      d.dateOfJourney ? new Date(d.dateOfJourney).toLocaleString('en-IN', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : null,
+      arrivalTime:        d.arrivalDate   ? new Date(d.arrivalDate).toLocaleString('en-IN',  {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : null,
+      duration:           null,
+      fare:               d.ticketFare || d.bookingFare,
+      trainCancelled:     false,
+      passengers: (d.passengerList || []).map((p, i) => ({
+        name:          `Passenger ${p.passengerSerialNumber || i + 1}`,
+        age:           null,
+        gender:        null,
+        bookingStatus: p.bookingStatusDetails || p.bookingStatus,
+        currentStatus: p.currentStatusDetails || p.currentStatus,
+        coach:         p.currentCoachId || '',
+        berth:         p.currentBerthNo ? String(p.currentBerthNo) : '',
+        prediction:    null,
+      }))
+    };
+  }
+  // Legacy / old API shape fallback (uppercase keys, BoardingStationName, etc.)
   return {
     pnrNumber: d.Pnr || pnr,
     trainNo: d.TrainNo || d.trainNumber || d.train_number,
@@ -2639,7 +2706,7 @@ async function checkPNR() {
       if (_signal.aborted) throw new DOMException('', 'AbortError');
       pnrData = demoPNR(pnr);
     } else {
-      const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: pnr }, _signal);
+      const data = await pnrApiCall(pnr, _signal);
       if (!data?.data) throw new Error('PNR not found or invalid response.');
       setLoaderStep('pl', 2, 'Parsing passenger & booking details…');
       await sleep(200);
@@ -2722,8 +2789,10 @@ async function renderPNRResult(d, container) {
     staticAdvice = `<div class="insight-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></span><span class="insight-text"><strong>Confirmed!</strong> Berth numbers assigned at chart preparation (~4h before departure). Screenshot your PNR before travel.</span></div>`;
   } else if (firstQT === 'RAC') {
     staticAdvice = `<div class="insight-strip"><span class="insight-icon">≈</span><span class="insight-text"><strong>RAC — travel guaranteed.</strong> You'll have a shared berth. Almost always upgrades to a full berth after chart prep.</span></div>`;
+  } else if (firstQT === 'RLWL' && (firstWP || 0) > 15) {
+    staticAdvice = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>Action needed:</strong> RLWL ${firstWP} is unlikely to confirm. Confirmation needs cancellations from the same remote boarding station. Book an alternative now. Cancel before chart prep for a full refund.</span></div>`;
   } else if (firstQT === 'RLWL' && (firstWP || 0) > 5) {
-    staticAdvice = `<div class="danger-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="danger-text"><strong>Action needed:</strong> RLWL ${firstWP} is unlikely to confirm. RLWL only clears on same remote-station cancellations — very rare. Book alternative now. Cancel this before chart prep for a full refund.</span></div>`;
+    staticAdvice = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>RLWL ${firstWP} — moderate risk.</strong> Confirmation depends on cancellations from the same remote boarding station. Monitor closely at T-24h and T-4h. Have a backup plan ready.</span></div>`;
   } else if (firstQT === 'PQWL') {
     staticAdvice = `<div class="warn-strip"><span class="insight-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><span class="warn-text"><strong>PQWL risk:</strong> Shared intermediate quota — slow to clear. Check Split Journey finder to see if a longer-segment booking gives GNWL instead.</span></div>`;
   } else if (firstQT === 'GNWL' && (firstWP || 0) <= 15) {
@@ -2804,7 +2873,7 @@ async function refreshWatchlistAll() {
   for (const entry of watchlist) {
     if (API_KEY) {
       try {
-        const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: entry.pnr });
+        const data = await pnrApiCall(entry.pnr);
         if (data?.data) { entry.data = normalizePNR(data.data, entry.pnr); }
       } catch {}
     }
@@ -2900,7 +2969,7 @@ async function refreshTracker() {
   for (const entry of trackerData) {
     if (API_KEY) {
       try {
-        const data = await apiCall('/api/v3/getPNRStatus', { pnrNumber: entry.pnr });
+        const data = await pnrApiCall(entry.pnr);
         if (data?.data) {
           const pnrData = normalizePNR(data.data, entry.pnr);
           const firstPax = pnrData.passengers?.[0];
