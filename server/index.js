@@ -246,27 +246,75 @@ async function fetchPNR(pnr) {
 }
 
 function normalizePNR(raw, pnr) {
-  // Mirrors the frontend normalizePNR — keeps what the UI needs
+  // Mirrors the frontend normalizePNR exactly — all fields the watchlist UI needs
   if (!raw) return null;
   const d = raw.data || raw;
+
+  // Primary API shape: passengerList, trainNumber, journeyClass, boardingPoint, etc.
+  if (d.passengerList || d.trainNumber || d.journeyClass) {
+    const chartRaw = d.chartStatus || '';
+    const chartPrepared = chartRaw.toLowerCase().includes('prepared') && !chartRaw.toLowerCase().includes('not');
+    return {
+      pnrNumber:          d.pnrNumber          || pnr,
+      trainNo:            d.trainNumber        || '',
+      trainName:          d.trainName          || '',
+      journeyDate:        d.dateOfJourney      || null,
+      boardingStation:    d.boardingPoint      || d.sourceStation      || '',
+      destinationStation: d.reservationUpto    || d.destinationStation || '',
+      fromCode:           d.boardingPoint      || d.sourceStation      || '',
+      toCode:             d.reservationUpto    || d.destinationStation || '',
+      class:              d.journeyClass       || '',
+      quota:              d.quota              || '',
+      chartStatus:        chartPrepared ? 'CHART PREPARED' : 'CHART NOT PREPARED',
+      departureTime:      d.dateOfJourney      || null,
+      arrivalTime:        d.arrivalDate        || null,
+      fare:               d.ticketFare         || d.bookingFare        || null,
+      trainCancelled:     false,
+      passengers: (d.passengerList || []).map((p, i) => ({
+        name:          `Passenger ${p.passengerSerialNumber || i + 1}`,
+        age:           null,
+        gender:        null,
+        bookingStatus: p.bookingStatusDetails || p.bookingStatus || '',
+        currentStatus: p.currentStatusDetails || p.currentStatus || '',
+        coach:         p.currentCoachId       || '',
+        berth:         p.currentBerthNo ? String(p.currentBerthNo) : '',
+        prediction:    null,
+      })),
+    };
+  }
+
+  // Legacy / uppercase-key fallback shape
   return {
-    pnrNumber:    d.pnrNumber    || pnr,
-    trainNumber:  d.trainNumber  || d.trainNo || '',
-    trainName:    d.trainName    || '',
-    boardingStation: d.boardingStation || d.boardingStationName || '',
-    destinationStation: d.destinationStation || d.destinationStationName || '',
-    journeyDate:  d.journeyDate  || d.dateOfJourney || '',
-    passengers:   (d.passengerList || d.passengers || []).map(p => ({
-      serialNo:      p.passengerSerialNumber || p.serialNo || '',
-      currentStatus: p.currentStatusDetails  || p.currentStatus || '',
-      bookingStatus: p.bookingStatusDetails   || p.bookingStatus || '',
+    pnrNumber:          d.Pnr               || pnr,
+    trainNo:            d.TrainNo           || d.trainNumber  || d.train_number || '',
+    trainName:          d.TrainName         || d.trainName    || d.train_name   || '',
+    journeyDate:        d.Doj               || d.dateOfJourney || d.journey_date || null,
+    boardingStation:    d.BoardingStationName || d.boardingStationName || d.boardingStation || '',
+    destinationStation: d.ReservationUptoName || d.destinationStationName || d.destinationStation || '',
+    fromCode:           d.From              || d.BoardingPoint || '',
+    toCode:             d.To                || d.ReservationUpto || '',
+    class:              d.Class             || d.classType    || d.class  || '',
+    quota:              d.Quota             || d.quota        || '',
+    chartStatus:        (d.ChartPrepared === true || d.chartPrepared === true) ? 'CHART PREPARED' : 'CHART NOT PREPARED',
+    departureTime:      d.DepartureTime     || null,
+    arrivalTime:        d.ArrivalTime       || null,
+    fare:               d.TicketFare        || d.BookingFare  || null,
+    trainCancelled:     d.TrainCancelledFlag || false,
+    passengers: (d.PassengerStatus || d.passengerList || d.passengers || []).map((p, i) => ({
+      name:          p.passengerName  || p.name          || `Passenger ${p.Number || i + 1}`,
+      age:           p.passengerAge   || p.age           || null,
+      gender:        p.passengerGender || p.gender       || null,
+      bookingStatus: p.BookingStatus  || p.bookingStatus || p.booking_status  || '',
+      currentStatus: p.CurrentStatus  || p.currentStatus || p.current_status  || '',
+      coach:         p.Coach          || p.coach         || '',
+      berth:         p.Berth          || p.berth         || '',
+      prediction:    p.Prediction     || null,
     })),
-    charting:     d.chartPrepared || d.charting || false,
   };
 }
 
 function statusKey(entry) {
-  return (entry.data?.passengers || []).map(p => p.currentStatus).join('|');
+  return (entry.data?.passengers || []).map(p => p.currentStatus || '').join('|');
 }
 
 // ── Poll cycle ────────────────────────────────────────────────────────────────
