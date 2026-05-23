@@ -3952,8 +3952,13 @@ async function syncWatchlistFromServer() {
     const state = await fetch('/api/watch/state').then(r => r.json());
     watchlist          = state.entries    || [];
     _serverNextCycleAt = state.nextCycleAt || null;
-    _serverLastCycleAt = state.lastCycleAt || null;
     _serverPollRunning = !!state.running;
+    // If the server just finished a new poll cycle, also refresh the WL tracker
+    const newCycleAt = state.lastCycleAt || null;
+    if (newCycleAt && newCycleAt !== _serverLastCycleAt && _serverLastCycleAt !== null) {
+      refreshTracker();
+    }
+    _serverLastCycleAt = newCycleAt;
     updateWatchCount();
     renderWatchlist();
     updatePollBar();
