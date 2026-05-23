@@ -940,7 +940,7 @@ let _serverHasGemini = false;
 let selectedClass = 'SL';
 let selectedQuota = 'GN';
 let selectedSplitClass = 'SL';
-let watchlist = JSON.parse(localStorage.getItem('railradar_watchlist') || '[]');
+let watchlist = []; // populated from server on initApp()
 let trackerData = JSON.parse(localStorage.getItem('railradar_tracker') || '[]');
 let lastPNRResult = null;
 let _lastTrains = null, _lastDate = null, _lastFrom = null, _lastTo = null;
@@ -2909,40 +2909,69 @@ async function renderPNRResult(d, container) {
 // ═══════════════════════════════════════════
 //  WATCHLIST
 // ═══════════════════════════════════════════
-function addToWatchlist() {
+// ── Watchlist: server-backed (no localStorage) ─────────────────────────────
+// The server holds the canonical list and runs auto-poll even when tab is closed.
+// The browser is just a view — it syncs on load and after each mutation.
+
+async function addToWatchlist() {
   const pnr = document.getElementById('pnr-input').value.trim();
   if (!pnr || pnr.length < 10) return;
   if (watchlist.find(w => w.pnr === pnr)) { alert('PNR already in watchlist.'); return; }
-  watchlist.push({ pnr, addedAt: new Date().toISOString(), lastChecked: new Date().toISOString(), data: lastPNRResult });
-  saveWatchlist(); updateWatchCount(); renderWatchlist();
-  // Request notification permission on first add
-  requestNotifPermission();
-  // Start auto-poller if not already running
-  if (!_pollTimer && !_pollPaused) startAutoPoll();
-  alert(`PNR ${pnr} added to watchlist. Auto-monitor will check every 30 minutes.`);
+  try {
+    const res = await fetch('/api/watch/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pnr })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to add PNR.'); return; }
+    requestNotifPermission();
+    await syncWatchlistFromServer();
+    alert(`PNR ${pnr} added. Server will auto-check every 30 minutes — even when this tab is closed.`);
+  } catch(e) { alert('Network error: ' + e.message); }
 }
 
-function removeFromWatchlist(pnr) {
-  watchlist = watchlist.filter(w => w.pnr !== pnr);
-  saveWatchlist(); updateWatchCount(); renderWatchlist();
+async function removeFromWatchlist(pnr) {
+  try {
+    await fetch('/api/watch/' + pnr, { method: 'DELETE' });
+    await syncWatchlistFromServer();
+  } catch {}
 }
 
-function clearWatchlist() { if (!confirm('Clear all PNRs?')) return; watchlist = []; saveWatchlist(); updateWatchCount(); renderWatchlist(); }
-function saveWatchlist() { localStorage.setItem('railradar_watchlist', JSON.stringify(watchlist)); }
+async function clearWatchlist() {
+  if (!confirm('Clear all PNRs?')) return;
+  for (const e of [...watchlist]) await fetch('/api/watch/' + e.pnr, { method: 'DELETE' });
+  await syncWatchlistFromServer();
+}
+
+function saveWatchlist() { /* no-op — server is the source of truth */ }
 function updateWatchCount() { document.getElementById('watch-count').textContent = watchlist.length; }
 
+async function syncWatchlistFromServer() {
+  try {
+    const state = await fetch('/api/watch/state').then(r => r.json());
+    watchlist = state.entries || [];
+    _serverNextCycleAt = state.nextCycleAt || null;
+    _serverLastCycleAt = state.lastCycleAt || null;
+    _serverPollRunning = !!state.running;
+    updateWatchCount();
+    renderWatchlist();
+    updatePollBar();
+  } catch {}
+}
+
 async function refreshWatchlistAll() {
-  for (const entry of watchlist) {
-    if (_serverHasApi) {
-      try {
-        const data = await pnrApiCall(entry.pnr);
-        if (data?.data) { entry.data = normalizePNR(data.data, entry.pnr); }
-      } catch {}
+  // Trigger an immediate server-side poll
+  try {
+    const res = await fetch('/api/watch/poll-now', { method: 'POST' });
+    if (res.ok) {
+      // Poll the state a few times to get the fresh results
+      for (let i = 0; i < 6; i++) {
+        await sleep(3000);
+        await syncWatchlistFromServer();
+      }
     }
-    entry.lastChecked = new Date().toISOString();
-    await sleep(300);
-  }
-  saveWatchlist(); renderWatchlist();
+  } catch {}
 }
 
 function renderWatchlist() {
@@ -3904,159 +3933,114 @@ async function checkAuthOnLoad() {
 }
 
 // ═══════════════════════════════════════════
-//  PNR AUTO-POLL ENGINE
+//  FRONTEND POLL DISPLAY
+//  Real polling runs on the server — always on, tab-independent.
+//  The browser syncs watchlist state from /api/watch/state on load
+//  and every 2 minutes. The countdown ticks against the server's
+//  nextCycleAt timestamp, so page refreshes never reset it.
 // ═══════════════════════════════════════════
-// Polls every 30 min normally; switches to 1 min after 20:30 local time.
-// On each poll: fetches all watchlist PNRs, diffs status, fires alerts.
 
-let _pollTimer    = null;
-let _pollPaused   = false;
-let _pollCountdown = 0;
-let _pollCountdownTimer = null;
-const POLL_NORMAL_MS  = 30 * 60 * 1000; // 30 minutes
+let _serverNextCycleAt = null;
+let _serverLastCycleAt = null;
+let _serverPollRunning = false;
+let _pollTickTimer     = null;
+let _pollSyncTimer     = null;
+const _shownAlertKeys  = new Set();
 
-function startAutoPoll() {
-  if (!watchlist.length) return;
-  _pollPaused = false;
-  document.getElementById('poll-status-bar').style.display = 'flex';
-  schedulePoll();
+async function syncWatchlistFromServer() {
+  try {
+    const state = await fetch('/api/watch/state').then(r => r.json());
+    watchlist          = state.entries    || [];
+    _serverNextCycleAt = state.nextCycleAt || null;
+    _serverLastCycleAt = state.lastCycleAt || null;
+    _serverPollRunning = !!state.running;
+    updateWatchCount();
+    renderWatchlist();
+    updatePollBar();
+    processServerAlerts(watchlist);
+  } catch {}
 }
 
-function schedulePoll() {
-  clearTimeout(_pollTimer);
-  clearInterval(_pollCountdownTimer);
-  if (_pollPaused) {
-    document.getElementById('poll-status-text').textContent = 'Auto-monitor paused';
-    document.getElementById('poll-dot').classList.remove('active');
+function startPollDisplay() {
+  clearInterval(_pollTickTimer);
+  _pollTickTimer = setInterval(updatePollBar, 1000);
+  clearInterval(_pollSyncTimer);
+  _pollSyncTimer = setInterval(syncWatchlistFromServer, 2 * 60 * 1000);
+  updatePollBar();
+}
+
+function updatePollBar() {
+  const bar = document.getElementById('poll-status-bar');
+  if (!watchlist.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const dot  = document.getElementById('poll-dot');
+  const text = document.getElementById('poll-status-text');
+  const mode = document.getElementById('poll-mode-label');
+  const next = document.getElementById('poll-next-label');
+  dot.classList.add('active');
+  if (_serverPollRunning) {
+    text.textContent = 'Checking PNRs…';
+    mode.textContent = '';
+    next.textContent = '';
     return;
   }
-  const interval = POLL_NORMAL_MS;
-  document.getElementById('poll-mode-label').textContent = '· 30-min interval';
-  document.getElementById('poll-status-text').textContent = 'PNR auto-monitor active';
-  document.getElementById('poll-dot').classList.add('active');
-  _pollCountdown = Math.floor(interval / 1000);
-  updatePollCountdown();
-  _pollCountdownTimer = setInterval(() => {
-    _pollCountdown--;
-    updatePollCountdown();
-  }, 1000);
-  _pollTimer = setTimeout(async () => {
-    clearInterval(_pollCountdownTimer);
-    document.getElementById('poll-status-text').textContent = 'Checking PNRs…';
-    await runPollCycle();
-    schedulePoll(); // reschedule
-  }, interval);
-}
-
-function updatePollCountdown() {
-  const m = Math.floor(_pollCountdown / 60);
-  const s = _pollCountdown % 60;
-  document.getElementById('poll-next-label').textContent =
-    'Next check in ' + (m > 0 ? m+'m ' : '') + s + 's';
+  text.textContent = 'PNR auto-monitor active (server)';
+  mode.textContent = '· 30-min interval';
+  if (_serverNextCycleAt) {
+    const secsLeft = Math.max(0, Math.round((new Date(_serverNextCycleAt) - Date.now()) / 1000));
+    const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+    next.textContent = secsLeft > 0 ? 'Next check in ' + (m > 0 ? m+'m ' : '') + s+'s' : 'Checking soon…';
+  } else {
+    next.textContent = '';
+  }
 }
 
 function togglePollPause() {
-  _pollPaused = !_pollPaused;
-  document.getElementById('poll-pause-btn').textContent = _pollPaused ? 'Resume' : 'Pause';
-  if (_pollPaused) {
-    clearTimeout(_pollTimer);
-    clearInterval(_pollCountdownTimer);
-    document.getElementById('poll-dot').classList.remove('active');
-    document.getElementById('poll-status-text').textContent = 'Auto-monitor paused';
-    document.getElementById('poll-next-label').textContent = '';
-  } else {
-    schedulePoll();
-  }
+  alert('Auto-monitoring runs on the server — it continues even when this tab is closed.\nUse "Refresh All" to trigger an immediate check.');
 }
 
-async function runPollCycle() {
-  if (!watchlist.length) return;
-  const changed = [];
-  for (const entry of watchlist) {
-    const prevStatuses = (entry.data?.passengers || []).map(p => p.currentStatus).join('|');
-    const prevPNR = entry.data?.pnrNumber;
-    if (_serverHasApi) {
-      try {
-        const data = await pnrApiCall(entry.pnr);
-        if (data?.data) {
-          const fresh = normalizePNR(data.data, entry.pnr);
-          const newStatuses = (fresh.passengers || []).map(p => p.currentStatus).join('|');
-          if (prevStatuses && newStatuses !== prevStatuses) {
-            changed.push({ pnr: entry.pnr, prev: prevStatuses, curr: newStatuses, data: fresh });
-          }
-          entry.data = fresh;
-        }
-      } catch {}
-    }
-    entry.lastChecked = new Date().toISOString();
-    await sleep(400);
-  }
-  saveWatchlist();
-  renderWatchlist();
-  // Also refresh tracker
-  await refreshTrackerSilent();
-  // Fire alerts
-  changed.forEach(c => firePNRAlert(c));
+async function triggerPollNow() {
+  try {
+    await fetch('/api/watch/poll-now', { method: 'POST' });
+    for (let i = 0; i < 8; i++) { await sleep(2500); await syncWatchlistFromServer(); }
+  } catch {}
 }
 
-async function refreshTrackerSilent() {
-  for (const entry of trackerData) {
-    if (_serverHasApi) {
-      try {
-        const data = await pnrApiCall(entry.pnr);
-        if (data?.data) {
-          const pnrData = normalizePNR(data.data, entry.pnr);
-          const firstPax = pnrData.passengers?.[0];
-          const pos = firstPax ? parseWLPosition(firstPax.currentStatus) : null;
-          if (pos !== null) {
-            entry.history.push({ ts: Date.now(), pos, status: firstPax.currentStatus, prediction: firstPax.prediction || null });
-            entry.history = entry.history.slice(-50);
-          }
-          entry.trainName = pnrData.trainName;
-          entry.cls = pnrData.class;
-          entry.journeyDate = pnrData.journeyDate;
-        }
-      } catch {}
+function processServerAlerts(entries) {
+  for (const entry of entries) {
+    for (const alert of (entry.alerts || [])) {
+      const key = entry.pnr + '|' + alert.at;
+      if (!_shownAlertKeys.has(key)) {
+        _shownAlertKeys.add(key);
+        firePNRAlert({ pnr: entry.pnr, prev: alert.prev, curr: alert.curr });
+      }
     }
-    await sleep(200);
   }
-  saveTracker(); renderTracker();
 }
 
 function firePNRAlert(info) {
-  const prevArr = info.prev.split('|');
-  const currArr = info.curr.split('|');
+  const prevArr = (info.prev || '').split('|');
+  const currArr = (info.curr || '').split('|');
   let title, body, type = 'changed';
-
   const allCnf = currArr.every(s => s && s.toUpperCase().startsWith('CNF'));
   if (allCnf) {
     title = '🎉 PNR CONFIRMED!';
-    body = `PNR ${info.pnr} — all passengers confirmed!\n${info.curr}`;
-    type = 'confirmed';
+    body  = `PNR ${info.pnr} — all passengers confirmed!\n${info.curr}`;
+    type  = 'confirmed';
   } else {
-    const changes = currArr.map((s, i) => {
-      if (s !== prevArr[i]) return `${prevArr[i] || '?'} → ${s}`;
-      return null;
-    }).filter(Boolean);
-    title = `⚠ PNR Status Changed`;
-    body = `PNR ${info.pnr}\n${changes.join(', ')}`;
-    type = 'changed';
+    const changes = currArr.map((s, i) => s !== prevArr[i] ? `${prevArr[i]||'?'} → ${s}` : null).filter(Boolean);
+    title = '⚠ PNR Status Changed';
+    body  = `PNR ${info.pnr}\n${changes.join(', ')}`;
   }
-
-  // In-app toast
   showPNRToast(info.pnr, title, body, type);
-
-  // Browser notification (if permission granted)
   if (Notification.permission === 'granted') {
-    try {
-      new Notification(title, { body, icon: '', tag: 'pnr-' + info.pnr });
-    } catch {}
+    try { new Notification(title, { body, tag: 'pnr-' + info.pnr }); } catch {}
   }
 }
 
 function showPNRToast(pnr, title, body, type) {
   const banner = document.getElementById('pnr-alert-banner');
-  const card = document.createElement('div');
+  const card   = document.createElement('div');
   card.className = 'pnr-alert-card ' + type;
   card.innerHTML = `
     <div class="pnr-alert-title ${type}">
@@ -4065,105 +4049,64 @@ function showPNRToast(pnr, title, body, type) {
     </div>
     <div class="pnr-alert-body">${body.replace(/\n/g,'<br>')}</div>`;
   banner.prepend(card);
-  // Auto-dismiss after 60s (but keep confirmed ones)
   if (type !== 'confirmed') setTimeout(() => card.remove(), 60000);
 }
 
 function requestNotifPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-}
-
-// Override addToWatchlist to start poll automatically
-const _origAddToWatchlist = typeof addToWatchlist === 'function' ? addToWatchlist : null;
-
-// Patch saveWatchlist to trigger poll-bar visibility
-const _origSaveWatchlist = saveWatchlist;
-function saveWatchlist() {
-  localStorage.setItem('railradar_watchlist', JSON.stringify(watchlist));
-  // Start poller if watchlist has items and not already running
-  if (watchlist.length > 0 && !_pollTimer && !_pollPaused) {
-    startAutoPoll();
-  } else if (watchlist.length === 0) {
-    clearTimeout(_pollTimer);
-    clearInterval(_pollCountdownTimer);
-    document.getElementById('poll-status-bar').style.display = 'none';
-  }
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 }
 
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
-  // Auth check — hide app until PIN verified
   document.getElementById('app-shell').style.display = 'none';
   const authed = await checkAuthOnLoad();
-  if (!authed) return; // initApp() called by verifyPin on success
+  if (!authed) return;
   initApp();
 });
 
 async function initApp() {
-  // Fetch server config — tells us what keys are available without exposing them
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
     _serverHasApi    = !!cfg.hasApiKey;
     _serverHasGemini = !!cfg.hasGeminiKey;
-    // Backfill the legacy API_KEY / GEMINI_KEY flags used in demo-mode checks
     API_KEY    = _serverHasApi    ? 'SERVER' : '';
     GEMINI_KEY = _serverHasGemini ? 'SERVER' : '';
   } catch {
     _serverHasApi = false; _serverHasGemini = false;
     API_KEY = ''; GEMINI_KEY = '';
   }
-  // Set default date to 7 days from now
   const d = new Date(); d.setDate(d.getDate() + 7);
   const iso = d.toISOString().split('T')[0];
   ['s-date','r-date','sp-date','sa-date'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = iso; el.min = new Date().toISOString().split('T')[0]; }
   });
-
-  // Show API status from env config
   const apiInd = document.getElementById('api-indicator');
-  if (_serverHasApi) {
-    apiInd.textContent = '● Live — IRCTC data active';
-    apiInd.style.color = 'var(--teal)';
-  } else {
-    apiInd.textContent = '● Demo mode — no key configured';
-    apiInd.style.color = 'var(--text3)';
-  }
+  if (_serverHasApi) { apiInd.textContent = '● Live — IRCTC data active'; apiInd.style.color = 'var(--teal)'; }
+  else               { apiInd.textContent = '● Demo mode — no key configured'; apiInd.style.color = 'var(--text3)'; }
   const gemInd = document.getElementById('gemini-indicator');
-  if (_serverHasGemini) {
-    gemInd.textContent = '● Active — AI advisor on';
-    gemInd.style.color = 'var(--purple)';
-  } else {
-    gemInd.textContent = '● Offline — static advice only';
-    gemInd.style.color = 'var(--text3)';
-  }
+  if (_serverHasGemini) { gemInd.textContent = '● Active — AI advisor on'; gemInd.style.color = 'var(--purple)'; }
+  else                  { gemInd.textContent = '● Offline — static advice only'; gemInd.style.color = 'var(--text3)'; }
 
-  // Init
-  renderWatchlist();
-  updateWatchCount();
+  await syncWatchlistFromServer();
+  startPollDisplay();
   renderTracker();
   runPredictor();
 
-  // Pre-fill example stations for Hyderabad user
-  document.getElementById('s-from').value = 'SC';
-  document.getElementById('s-to').value = 'MAS';
-  document.getElementById('r-from').value = 'SC';
-  document.getElementById('r-to').value = 'MAS';
+  document.getElementById('s-from').value  = 'SC';
+  document.getElementById('s-to').value    = 'MAS';
+  document.getElementById('r-from').value  = 'SC';
+  document.getElementById('r-to').value    = 'MAS';
   document.getElementById('sp-from').value = 'SC';
-  document.getElementById('sp-to').value = 'KPD';
+  document.getElementById('sp-to').value   = 'KPD';
   document.getElementById('sa-from').value = 'NDLS';
-  document.getElementById('sa-to').value = 'BPL';
+  document.getElementById('sa-to').value   = 'BPL';
 
-  // Start auto-poller if watchlist is non-empty
-  if (watchlist.length > 0) {
-    requestNotifPermission();
-    startAutoPoll();
-  }
+  if (watchlist.length > 0) requestNotifPermission();
 }
+
 </script>
 </div><!-- /app-shell -->
 </body>
